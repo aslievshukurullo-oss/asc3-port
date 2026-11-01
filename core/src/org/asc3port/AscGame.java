@@ -4,7 +4,6 @@ import com.badlogic.gdx.ApplicationAdapter;
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.OrthographicCamera;
-import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
@@ -14,28 +13,24 @@ import com.badlogic.gdx.utils.viewport.Viewport;
 /**
  * ASC3 Port — LibGDX/Android, горизонтальный режим.
  *
- * Виртуальный экран: 480×320 (y-down).
- * Оригинальное окно 240×320 по центру (GAME_X=120).
- * Автомат состояний по оригиналу k.w(n):
- *   STATE_INIT  (1) – инициализация ассетов
+ * Виртуальный экран: 480×320 (y-down). Контент заполняет весь экран.
+ * Автомат состояний:
+ *   STATE_INIT  (1) – инициализация
  *   STATE_SPLASH(2) – заставка Gameloft / AC3 (~3 сек)
- *   STATE_MENU  (5) – главное меню
- *   STATE_GAME  (7) – просмотрщик спрайтов (заглушка геймплея)
+ *   STATE_MENU  (5) – главное меню (touch + D-pad)
+ *   STATE_GAME  (7) – геймплей с TileMap, Player, Camera
  */
 public class AscGame extends ApplicationAdapter {
 
-    // Размеры
-    public static final int GAME_W = 240, GAME_H = 320;
+    // Размеры — только полный экран
     public static final int VIEW_W = 480, VIEW_H = 320;
-    public static final int GAME_X = (VIEW_W - GAME_W) / 2; // 120
 
-    // Состояния (соответствуют k.w оригинала)
+    // Состояния
     private static final int STATE_INIT   = 1;
     private static final int STATE_SPLASH = 2;
     private static final int STATE_MENU   = 5;
     private static final int STATE_GAME   = 7;
 
-    // Время отображения заставки (мс)
     private static final float SPLASH_TIME = 3.0f;
 
     // --- Графика ---
@@ -46,23 +41,32 @@ public class AscGame extends ApplicationAdapter {
     private BitmapFont font;
     private TouchOverlay pad;
 
-    // --- Ассеты ---
-    private ASprite splashSprite;   // пак /4, W[50] — заставка
-    private ASprite fontSprite;     // пак /2, W[55] — игровой шрифт
-    private StringTable strings;    // EN секция 0
+    // --- Ассеты заставки/меню ---
+    private ASprite splashSprite;
 
     // --- Меню ---
     private static final String[] MENU_ITEMS = {
         "NEW GAME", "CONTINUE", "OPTIONS", "HELP", "ABOUT"
     };
+    private static final int MENU_X  = 160;
+    private static final int MENU_W  = 160;
+    private static final int MENU_Y0 = 110;
+    private static final int MENU_DY = 36;
     private int menuSel = 0;
 
-    // --- Просмотрщик спрайтов (STATE_GAME) ---
+    // --- Геймплей (STATE_GAME) ---
+    private TileMap tileMap;
+    private Player player;
+    private GameCamera gameCam;
+    private boolean gameLoaded = false;
+
+    // Запасной просмотрщик спрайтов (если карта не загрузится)
     private String[] spriteNames;
     private int sprCur = 0, sprAnim = 0, sprStep = 0;
     private float sprTimer = 0;
     private ASprite curSprite;
     private static final float TICK = 1f / 25f;
+    private boolean useSpriteViewer = false;
 
     // --- Автомат состояний ---
     private int state = STATE_INIT;
@@ -71,31 +75,23 @@ public class AscGame extends ApplicationAdapter {
     @Override
     public void create() {
         cam = new OrthographicCamera();
-        cam.setToOrtho(true, VIEW_W, VIEW_H); // y-down как в оригинале
+        cam.setToOrtho(true, VIEW_W, VIEW_H); // y-down
         viewport = new FitViewport(VIEW_W, VIEW_H, cam);
         batch = new SpriteBatch();
         shapes = new ShapeRenderer();
         font = new BitmapFont(true); // flipped для y-down
-        font.getData().setScale(1.2f);
+        font.getData().setScale(1.4f);
         pad = new TouchOverlay(viewport);
 
-        // Загрузка строк
-        try {
-            strings = new StringTable("EN_000");
-        } catch (Exception e) {
-            strings = null;
-        }
+        try { splashSprite = new ASprite("p4_000"); } catch (Exception e) { splashSprite = null; }
 
-        // Загрузка заставки (пак /4)
+        // Загружаем список спрайтов как запасной вариант
         try {
-            splashSprite = new ASprite("p4_000");
+            String idx = Gdx.files.internal("sprites/index.txt").readString().trim();
+            spriteNames = idx.split("\\s+");
         } catch (Exception e) {
-            splashSprite = null;
+            spriteNames = new String[0];
         }
-
-        // Список спрайтов для просмотрщика
-        String idx = Gdx.files.internal("sprites/index.txt").readString().trim();
-        spriteNames = idx.split("\\s+");
 
         state = STATE_SPLASH;
         stateTimer = 0;
@@ -103,12 +99,13 @@ public class AscGame extends ApplicationAdapter {
 
     @Override
     public void resize(int w, int h) {
-        viewport.update(w, h, false);
+        viewport.update(w, h, true);
     }
 
     @Override
     public void render() {
-        float dt = Gdx.graphics.getDeltaTime();
+        float dt = Math.min(Gdx.graphics.getDeltaTime(), 0.05f); // cap at 20fps
+        pad.gameMode = (state == STATE_GAME);
         pad.update();
         update(dt);
         draw();
@@ -119,8 +116,9 @@ public class AscGame extends ApplicationAdapter {
 
         switch (state) {
             case STATE_SPLASH:
-                // Переход по таймеру или нажатию клавиши
-                if (stateTimer >= SPLASH_TIME || (pad.pressed & (Keys.FIRE | Keys.NUM5)) != 0) {
+                if (stateTimer >= SPLASH_TIME
+                        || (pad.pressed & (Keys.FIRE | Keys.NUM5)) != 0
+                        || pad.touchJustDown) {
                     state = STATE_MENU;
                     stateTimer = 0;
                 }
@@ -131,20 +129,83 @@ public class AscGame extends ApplicationAdapter {
                     menuSel = (menuSel - 1 + MENU_ITEMS.length) % MENU_ITEMS.length;
                 if ((pad.pressed & Keys.DOWN) != 0)
                     menuSel = (menuSel + 1) % MENU_ITEMS.length;
-                if ((pad.pressed & (Keys.FIRE | Keys.NUM5)) != 0) {
-                    if (menuSel == 0) { // NEW GAME -> просмотрщик спрайтов
-                        state = STATE_GAME;
-                        stateTimer = 0;
-                        loadSprite(0);
+                if ((pad.pressed & (Keys.FIRE | Keys.NUM5)) != 0)
+                    activateMenu(menuSel);
+
+                if (pad.touchJustDown) {
+                    int tapped = getTappedMenuItem(pad.touchX, pad.touchY);
+                    if (tapped >= 0) {
+                        if (tapped == menuSel) activateMenu(tapped);
+                        else menuSel = tapped;
                     }
                 }
                 break;
 
             case STATE_GAME:
-                updateSpriteViewer(dt);
+                if (useSpriteViewer) {
+                    updateSpriteViewer(dt);
+                } else {
+                    updateGame(dt);
+                }
                 break;
         }
     }
+
+    private void updateGame(float dt) {
+        if (player == null || tileMap == null) return;
+
+        // Возврат в меню
+        if ((pad.pressed & Keys.SOFT_L) != 0) {
+            state = STATE_MENU;
+            stateTimer = 0;
+            return;
+        }
+
+        player.update(dt, tileMap, pad.held);
+        gameCam.update(player.x, player.y);
+    }
+
+    private int getTappedMenuItem(float tx, float ty) {
+        for (int i = 0; i < MENU_ITEMS.length; i++) {
+            float itemY = MENU_Y0 + i * MENU_DY;
+            if (tx >= MENU_X - 20 && tx <= MENU_X + MENU_W + 20
+                    && ty >= itemY - 16 && ty <= itemY + 16) return i;
+        }
+        return -1;
+    }
+
+    private void activateMenu(int item) {
+        switch (item) {
+            case 0: // NEW GAME
+                startGame();
+                break;
+            default:
+                break;
+        }
+    }
+
+    private void startGame() {
+        // Пробуем загрузить TileMap уровня 1
+        try {
+            tileMap  = new TileMap(1);
+            player   = new Player(80, 200);
+            gameCam  = new GameCamera(VIEW_W, VIEW_H,
+                                      tileMap.getPixelWidth(),
+                                      tileMap.getPixelHeight());
+            gameCam.snapTo(player.x, player.y);
+            gameLoaded = true;
+            useSpriteViewer = false;
+        } catch (Exception e) {
+            // Карта не загрузилась — используем просмотрщик спрайтов
+            gameLoaded = false;
+            useSpriteViewer = true;
+            loadSprite(0);
+        }
+        state = STATE_GAME;
+        stateTimer = 0;
+    }
+
+    // ─── Просмотрщик спрайтов (запасной режим) ───────────────────────────────
 
     private void updateSpriteViewer(float dt) {
         if ((pad.pressed & Keys.RIGHT) != 0) loadSprite(sprCur + 1);
@@ -157,9 +218,7 @@ public class AscGame extends ApplicationAdapter {
             sprAnim = (sprAnim - 1 + curSprite.anims.length) % curSprite.anims.length;
             sprStep = 0; sprTimer = 0;
         }
-        if ((pad.pressed & Keys.SOFT_L) != 0) {
-            state = STATE_MENU; stateTimer = 0;
-        }
+        if ((pad.pressed & Keys.SOFT_L) != 0) { state = STATE_MENU; stateTimer = 0; }
         if (curSprite != null && curSprite.anims.length > 0) {
             ASprite.Anim an = curSprite.anims[sprAnim];
             if (an.n > 0) {
@@ -177,9 +236,7 @@ public class AscGame extends ApplicationAdapter {
         if (spriteNames == null || spriteNames.length == 0) return;
         sprCur = ((idx % spriteNames.length) + spriteNames.length) % spriteNames.length;
         if (curSprite != null) { curSprite.dispose(); curSprite = null; }
-        try {
-            curSprite = new ASprite(spriteNames[sprCur]);
-        } catch (Exception ignored) {}
+        try { curSprite = new ASprite(spriteNames[sprCur]); } catch (Exception ignored) {}
         sprAnim = 0; sprStep = 0; sprTimer = 0;
     }
 
@@ -188,96 +245,138 @@ public class AscGame extends ApplicationAdapter {
     private void draw() {
         Gdx.gl.glClearColor(0.05f, 0.05f, 0.08f, 1f);
         Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
-        viewport.apply(false);
+        viewport.apply(true);
         shapes.setProjectionMatrix(cam.combined);
         batch.setProjectionMatrix(cam.combined);
-
-        // Фон оригинального окна
-        shapes.begin(ShapeRenderer.ShapeType.Filled);
-        shapes.setColor(0.10f, 0.11f, 0.15f, 1f);
-        shapes.rect(GAME_X, 0, GAME_W, GAME_H);
-        shapes.end();
 
         switch (state) {
             case STATE_SPLASH: drawSplash(); break;
             case STATE_MENU:   drawMenu();   break;
-            case STATE_GAME:   drawGame();   break;
+            case STATE_GAME:
+                if (useSpriteViewer) drawSpriteViewer();
+                else                 drawGame();
+                break;
         }
 
         pad.draw(shapes, batch, font);
     }
 
     private void drawSplash() {
+        shapes.begin(ShapeRenderer.ShapeType.Filled);
+        shapes.setColor(0.02f, 0.02f, 0.05f, 1f);
+        shapes.rect(0, 0, VIEW_W, VIEW_H);
+        shapes.end();
+
+        batch.begin();
         if (splashSprite != null && splashSprite.frames.length > 0) {
-            batch.begin();
-            // Кадр 0 или 1 в зависимости от времени
             int fi = (stateTimer > 1.5f && splashSprite.frames.length > 1) ? 1 : 0;
-            splashSprite.drawFrame(batch, fi,
-                GAME_X + GAME_W / 2f, GAME_H / 2f, 0);
-            batch.end();
+            splashSprite.drawFrame(batch, fi, VIEW_W / 2f, VIEW_H / 2f, 0);
         } else {
-            // Текстовая заставка если спрайт не загрузился
-            batch.begin();
             font.setColor(1f, 0.85f, 0.2f, 1f);
-            font.draw(batch, "ASSASSIN'S CREED III", GAME_X + 10, 120);
+            font.draw(batch, "ASSASSIN'S CREED III", VIEW_W / 2f - 110, VIEW_H / 2f - 30);
             font.setColor(0.7f, 0.7f, 0.7f, 1f);
-            font.draw(batch, "Gameloft", GAME_X + 80, 160);
+            font.draw(batch, "Mobile Port", VIEW_W / 2f - 50, VIEW_H / 2f + 10);
             font.setColor(0.4f, 0.4f, 0.4f, 1f);
-            font.draw(batch, "Tap to continue", GAME_X + 55, 260);
-            batch.end();
+            font.draw(batch, "Tap to continue", VIEW_W / 2f - 70, VIEW_H - 30);
         }
-        // Прогресс-бар
+        batch.end();
+
         float pct = Math.min(stateTimer / SPLASH_TIME, 1f);
         shapes.begin(ShapeRenderer.ShapeType.Filled);
-        shapes.setColor(0.25f, 0.25f, 0.30f, 1f);
-        shapes.rect(GAME_X + 20, GAME_H - 16, GAME_W - 40, 6);
+        shapes.setColor(0.20f, 0.20f, 0.25f, 1f);
+        shapes.rect(40, VIEW_H - 18, VIEW_W - 80, 6);
         shapes.setColor(0.9f, 0.7f, 0.1f, 1f);
-        shapes.rect(GAME_X + 20, GAME_H - 16, (GAME_W - 40) * pct, 6);
+        shapes.rect(40, VIEW_H - 18, (VIEW_W - 80) * pct, 6);
         shapes.end();
     }
 
     private void drawMenu() {
+        shapes.begin(ShapeRenderer.ShapeType.Filled);
+        shapes.setColor(0.05f, 0.06f, 0.10f, 1f);
+        shapes.rect(0, 0, VIEW_W, VIEW_H);
+        shapes.setColor(0.12f, 0.10f, 0.03f, 1f);
+        shapes.rect(0, 0, 140, VIEW_H);
+        shapes.rect(VIEW_W - 140, 0, 140, VIEW_H);
+        shapes.end();
+
         batch.begin();
-        // Заголовок
         font.setColor(0.95f, 0.80f, 0.15f, 1f);
-        font.draw(batch, "ASSASSIN'S CREED III", GAME_X + 8, 30);
-        // Линия
+        font.draw(batch, "ASSASSIN'S CREED III", VIEW_W / 2f - 120, 40);
+        font.setColor(0.5f, 0.5f, 0.5f, 1f);
+        font.draw(batch, "J2ME  Port", VIEW_W / 2f - 45, 68);
         batch.end();
+
         shapes.begin(ShapeRenderer.ShapeType.Filled);
         shapes.setColor(0.5f, 0.4f, 0.1f, 1f);
-        shapes.rect(GAME_X + 8, 42, GAME_W - 16, 1);
+        shapes.rect(MENU_X - 20, 82, MENU_W + 40, 1);
         shapes.end();
-        // Пункты меню
+
         batch.begin();
         for (int i = 0; i < MENU_ITEMS.length; i++) {
+            float itemY = MENU_Y0 + i * MENU_DY;
             boolean sel = i == menuSel;
             if (sel) {
                 batch.end();
                 shapes.begin(ShapeRenderer.ShapeType.Filled);
-                shapes.setColor(0.2f, 0.18f, 0.05f, 1f);
-                shapes.rect(GAME_X + 8, 60 + i * 36 - 14, GAME_W - 16, 28);
+                shapes.setColor(0.22f, 0.18f, 0.04f, 0.9f);
+                shapes.rect(MENU_X - 10, itemY - 16, MENU_W + 20, 28);
+                shapes.setColor(0.9f, 0.7f, 0.1f, 1f);
+                shapes.rect(MENU_X - 10, itemY - 16, 3, 28);
                 shapes.end();
                 batch.begin();
             }
-            font.setColor(sel ? 1f : 0.7f, sel ? 0.85f : 0.7f, sel ? 0.1f : 0.7f, 1f);
-            font.draw(batch, (sel ? "> " : "  ") + MENU_ITEMS[i], GAME_X + 14, 60 + i * 36);
+            font.setColor(sel ? 1f : 0.65f, sel ? 0.85f : 0.65f, sel ? 0.1f : 0.65f, 1f);
+            font.draw(batch, MENU_ITEMS[i], MENU_X + (sel ? 8 : 6), itemY + 8);
         }
-        // Подсказка
-        font.setColor(0.4f, 0.4f, 0.4f, 1f);
-        font.draw(batch, "UP/DOWN: move  OK: select", GAME_X + 8, GAME_H - 8);
+        font.setColor(0.35f, 0.35f, 0.35f, 1f);
+        font.draw(batch, "TAP to select  TAP again / OK to confirm", 60, VIEW_H - 10);
         batch.end();
     }
 
     private void drawGame() {
+        if (tileMap == null || gameCam == null) return;
+
+        // Небо / фон
+        shapes.begin(ShapeRenderer.ShapeType.Filled);
+        shapes.setColor(0.35f, 0.55f, 0.75f, 1f);
+        shapes.rect(0, 0, VIEW_W, VIEW_H);
+        shapes.end();
+
+        batch.begin();
+
+        // Рисуем тайловую карту
+        tileMap.draw(batch, gameCam.x, gameCam.y, VIEW_W, VIEW_H);
+
+        // Рисуем игрока
+        if (player != null) {
+            player.draw(batch, gameCam.x, gameCam.y);
+        }
+
+        // HUD
+        font.setColor(1f, 1f, 1f, 0.8f);
+        if (player != null) {
+            font.draw(batch, String.format("X:%.0f Y:%.0f", player.x, player.y), 125, 14);
+        }
+        font.setColor(0.35f, 0.35f, 0.35f, 1f);
+        font.draw(batch, "L/R: move  OK: jump  L-soft: menu", 125, VIEW_H - 8);
+
+        batch.end();
+    }
+
+    private void drawSpriteViewer() {
+        shapes.begin(ShapeRenderer.ShapeType.Filled);
+        shapes.setColor(0.08f, 0.09f, 0.12f, 1f);
+        shapes.rect(0, 0, VIEW_W, VIEW_H);
+        shapes.end();
+
         if (curSprite == null) {
             batch.begin();
             font.setColor(1f, 0.3f, 0.3f, 1f);
-            font.draw(batch, "No sprite loaded", GAME_X + 20, 150);
+            font.draw(batch, "No sprite loaded", VIEW_W / 2f - 70, VIEW_H / 2f);
             batch.end();
             return;
         }
         batch.begin();
-        // Рисуем текущий анимационный кадр
         if (curSprite.anims.length > 0) {
             ASprite.Anim an = curSprite.anims[sprAnim];
             if (an.n > 0) {
@@ -285,30 +384,26 @@ public class AscGame extends ApplicationAdapter {
                 if (afIdx < curSprite.afs.length) {
                     ASprite.AnimFrame af = curSprite.afs[afIdx];
                     curSprite.drawFrame(batch, af.frame,
-                        GAME_X + GAME_W / 2f + af.x,
-                        GAME_H / 2f + af.y, af.tr);
+                        VIEW_W / 2f + af.x, VIEW_H / 2f + af.y, af.tr);
                 }
             }
         } else if (curSprite.frames.length > 0) {
-            curSprite.drawFrame(batch, 0, GAME_X + GAME_W / 2f, GAME_H / 2f, 0);
+            curSprite.drawFrame(batch, 0, VIEW_W / 2f, VIEW_H / 2f, 0);
         }
-        // HUD
-        String name = spriteNames[sprCur];
-        font.setColor(1f, 1f, 1f, 0.9f);
-        font.draw(batch, name, GAME_X + 2, 10);
-        font.setColor(0.7f, 0.9f, 0.7f, 1f);
-        font.draw(batch, "A:" + sprAnim + "/" + curSprite.anims.length
-            + " F:" + sprStep, GAME_X + 2, GAME_H - 8);
-        font.setColor(0.4f, 0.4f, 0.4f, 1f);
-        font.draw(batch, "L/R:sprite  U/D:anim  BACK:menu", GAME_X + 2, GAME_H - 20);
+        if (spriteNames != null && sprCur < spriteNames.length) {
+            font.setColor(1f, 1f, 1f, 0.9f);
+            font.draw(batch, spriteNames[sprCur] + "  A:" + sprAnim
+                + "/" + curSprite.anims.length + "  F:" + sprStep, 125, 12);
+        }
         batch.end();
     }
 
     @Override
     public void dispose() {
         if (splashSprite != null) splashSprite.dispose();
-        if (fontSprite   != null) fontSprite.dispose();
         if (curSprite    != null) curSprite.dispose();
+        if (tileMap      != null) tileMap.dispose();
+        if (player       != null) player.dispose();
         batch.dispose();
         shapes.dispose();
         font.dispose();

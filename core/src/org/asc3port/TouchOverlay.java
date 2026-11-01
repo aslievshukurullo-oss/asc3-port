@@ -10,8 +10,8 @@ import com.badlogic.gdx.utils.viewport.Viewport;
 
 /**
  * Экранные кнопки для горизонтального режима (480x320, y-down).
- * Оригинальное окно 240x320 по центру (x=120..360), панели управления по бокам.
- * Возвращает оригинальные битовые маски клавиш (см. Keys).
+ * D-pad и кнопки видны ТОЛЬКО в STATE_GAME (gameMode=true).
+ * В меню/заставке — только обработка кликов по меню.
  */
 public class TouchOverlay {
     private static final int MAX_POINTERS = 10;
@@ -26,7 +26,7 @@ public class TouchOverlay {
     }
 
     // Левая панель: крестовина + * #
-    // Правая панель: OK (FIRE), цифры 1 3 5 7 9, левый/правый софт
+    // Правая панель: OK (FIRE), цифры, левый/правый софт
     private final Btn[] btns = {
         new Btn("^",  Keys.UP,     60,  188, 26),
         new Btn("v",  Keys.DOWN,   60,  276, 26),
@@ -48,21 +48,49 @@ public class TouchOverlay {
     private final Viewport viewport;
     public int held, pressed, released;
 
+    /** Когда true — рисуем и обрабатываем D-pad. Когда false — скрыт. */
+    public boolean gameMode = false;
+
+    /** Координаты последнего касания (в виртуальном пространстве) для меню */
+    public float touchX = -1, touchY = -1;
+    public boolean touchJustDown = false;
+
+    private boolean wasTouched = false;
+
     public TouchOverlay(Viewport vp) { viewport = vp; }
 
     public void update() {
         int now = 0;
-        for (int p = 0; p < MAX_POINTERS; p++) {
-            if (!Gdx.input.isTouched(p)) continue;
-            tmp.set(Gdx.input.getX(p), Gdx.input.getY(p));
+        touchJustDown = false;
+        touchX = -1; touchY = -1;
+
+        boolean isTouched = Gdx.input.isTouched(0);
+
+        // Определяем момент касания (just down) для меню
+        if (isTouched && !wasTouched) {
+            touchJustDown = true;
+            tmp.set(Gdx.input.getX(0), Gdx.input.getY(0));
             viewport.unproject(tmp);
-            for (Btn b : btns) {
-                float dx = tmp.x - b.cx, dy = tmp.y - b.cy;
-                float rr = b.r + 8; // небольшой запас для пальца
-                if (dx * dx + dy * dy <= rr * rr) now |= b.bit;
+            touchX = tmp.x;
+            touchY = tmp.y;
+        }
+        wasTouched = isTouched;
+
+        if (gameMode) {
+            // Обрабатываем нажатия кнопок только в игровом режиме
+            for (int p = 0; p < MAX_POINTERS; p++) {
+                if (!Gdx.input.isTouched(p)) continue;
+                tmp.set(Gdx.input.getX(p), Gdx.input.getY(p));
+                viewport.unproject(tmp);
+                for (Btn b : btns) {
+                    float dx = tmp.x - b.cx, dy = tmp.y - b.cy;
+                    float rr = b.r + 8;
+                    if (dx * dx + dy * dy <= rr * rr) now |= b.bit;
+                }
             }
         }
-        // Клавиатура (эмулятор / внешняя клавиатура)
+
+        // Клавиатура (эмулятор / внешняя клавиатура) — всегда
         if (Gdx.input.isKeyPressed(com.badlogic.gdx.Input.Keys.UP))    now |= Keys.UP;
         if (Gdx.input.isKeyPressed(com.badlogic.gdx.Input.Keys.DOWN))  now |= Keys.DOWN;
         if (Gdx.input.isKeyPressed(com.badlogic.gdx.Input.Keys.LEFT))  now |= Keys.LEFT;
@@ -70,12 +98,15 @@ public class TouchOverlay {
         if (Gdx.input.isKeyPressed(com.badlogic.gdx.Input.Keys.ENTER) ||
             Gdx.input.isKeyPressed(com.badlogic.gdx.Input.Keys.SPACE)) now |= Keys.FIRE;
         if (Gdx.input.isKeyPressed(com.badlogic.gdx.Input.Keys.ESCAPE)) now |= Keys.SOFT_L;
+
         pressed  = now & ~held;
         released = held & ~now;
         held = now;
     }
 
     public void draw(ShapeRenderer sr, SpriteBatch sb, BitmapFont font) {
+        if (!gameMode) return; // Не рисуем D-pad в меню/заставке
+
         // Фоновые круги кнопок
         sr.begin(ShapeRenderer.ShapeType.Filled);
         for (Btn b : btns) {
