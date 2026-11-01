@@ -1,0 +1,75 @@
+apply plugin: 'com.android.application'
+
+configurations { natives }
+
+android {
+    namespace 'org.asc3port'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId 'org.asc3port.landscape'
+        minSdk 21
+        targetSdk 34
+        versionCode 1
+        versionName '0.1'
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+
+    sourceSets {
+        main {
+            java.srcDirs   = ['src']
+            assets.srcDirs = ['assets']
+            jniLibs.srcDirs = ['libs']
+        }
+    }
+
+    packagingOptions {
+        jniLibs { useLegacyPackaging = true }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+        }
+    }
+}
+
+dependencies {
+    implementation project(':core')
+    api "com.badlogicgames.gdx:gdx-backend-android:$gdxVersion"
+    natives "com.badlogicgames.gdx:gdx-platform:$gdxVersion:natives-armeabi-v7a"
+    natives "com.badlogicgames.gdx:gdx-platform:$gdxVersion:natives-arm64-v8a"
+    natives "com.badlogicgames.gdx:gdx-platform:$gdxVersion:natives-x86"
+    natives "com.badlogicgames.gdx:gdx-platform:$gdxVersion:natives-x86_64"
+}
+
+tasks.register('copyAndroidNatives') {
+    doFirst {
+        ['armeabi-v7a', 'arm64-v8a', 'x86', 'x86_64'].each { abi ->
+            file("libs/${abi}/").mkdirs()
+        }
+        configurations.natives.copy().files.each { jar ->
+            def abi = null
+            ['armeabi-v7a', 'arm64-v8a', 'x86_64', 'x86'].each { a ->
+                if (jar.name.endsWith("natives-${a}.jar")) abi = a
+            }
+            if (abi != null) {
+                project.copy {
+                    from project.zipTree(jar)
+                    into file("libs/${abi}")
+                    include '*.so'
+                }
+            }
+        }
+    }
+}
+
+tasks.matching {
+    it.name.contains('merge') && it.name.contains('JniLibFolders')
+}.configureEach {
+    it.dependsOn 'copyAndroidNatives'
+}

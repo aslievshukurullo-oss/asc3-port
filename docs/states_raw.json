@@ -1,0 +1,189 @@
+{
+ "1": {
+  "lines": 53,
+  "packs": [],
+  "goto": [
+   2
+  ],
+  "sprites": []
+ },
+ "2": {
+  "lines": 40,
+  "packs": [
+   "/2",
+   "/4"
+  ],
+  "goto": [
+   3
+  ],
+  "sprites": [
+   50,
+   55
+  ]
+ },
+ "3": {
+  "lines": 40,
+  "packs": [],
+  "goto": [
+   5
+  ],
+  "sprites": []
+ },
+ "4": {
+  "lines": 47,
+  "packs": [],
+  "goto": [
+   6
+  ],
+  "sprites": []
+ },
+ "5": {
+  "lines": 3,
+  "packs": [],
+  "goto": [],
+  "sprites": []
+ },
+ "6": {
+  "lines": 22,
+  "packs": [],
+  "goto": [
+   7
+  ],
+  "sprites": []
+ },
+ "7": {
+  "lines": 150,
+  "packs": [],
+  "goto": [],
+  "sprites": []
+ },
+ "8": {
+  "lines": 70,
+  "packs": [],
+  "goto": [],
+  "sprites": []
+ },
+ "9": {
+  "lines": 39,
+  "packs": [],
+  "goto": [],
+  "sprites": []
+ },
+ "10": {
+  "lines": 3,
+  "packs": [],
+  "goto": [],
+  "sprites": []
+ },
+ "13": {
+  "lines": 136,
+  "packs": [],
+  "goto": [
+   5
+  ],
+  "sprites": []
+ },
+ "14": {
+  "lines": 76,
+  "packs": [],
+  "goto": [],
+  "sprites": []
+ },
+ "15": {
+  "lines": 3,
+  "packs": [],
+  "goto": [],
+  "sprites": []
+ },
+ "16": {
+  "lines": 58,
+  "packs": [],
+  "goto": [
+   7,
+   10,
+   27
+  ],
+  "sprites": []
+ },
+ "17": {
+  "lines": 0,
+  "packs": [],
+  "goto": [],
+  "sprites": []
+ },
+ "18": {
+  "lines": 72,
+  "packs": [],
+  "goto": [
+   7,
+   13
+  ],
+  "sprites": []
+ },
+ "19": {
+  "lines": 3,
+  "packs": [],
+  "goto": [],
+  "sprites": []
+ },
+ "20": {
+  "lines": 3,
+  "packs": [],
+  "goto": [],
+  "sprites": []
+ },
+ "21": {
+  "lines": 26,
+  "packs": [],
+  "goto": [
+   5
+  ],
+  "sprites": []
+ },
+ "22": {
+  "lines": 26,
+  "packs": [],
+  "goto": [],
+  "sprites": []
+ },
+ "26": {
+  "lines": 62,
+  "packs": [],
+  "goto": [
+   7
+  ],
+  "sprites": []
+ },
+ "27": {
+  "lines": 27,
+  "packs": [],
+  "goto": [
+   26
+  ],
+  "sprites": []
+ },
+ "28": {
+  "lines": 3,
+  "packs": [],
+  "goto": [],
+  "sprites": []
+ },
+ "29": {
+  "lines": 3,
+  "packs": [],
+  "goto": [],
+  "sprites": []
+ },
+ "30": {
+  "lines": 3,
+  "packs": [],
+  "goto": [],
+  "sprites": []
+ },
+ "31": {
+  "lines": 3,
+  "packs": [],
+  "goto": [],
+  "sprites": []
+ }
+}
