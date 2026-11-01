@@ -11,14 +11,21 @@ public class GameCamera {
     /** Текущая позиция камеры (левый-верхний угол видимой области) */
     public float x, y;
 
-    /** Размер видимой области */
-    private final int viewW, viewH;
+    /** Размер видимой области (обновляется при resize) */
+    private int viewW, viewH;
 
     /** Размер карты в пикселях */
     private final int mapPixelW, mapPixelH;
 
     /** Плавность следования (0=мгновенно, 1=не движется, ~0.1 = плавно) */
     private static final float LERP = 0.12f;
+
+    /** Обновить размер видимой области (вызывать при resize). */
+    public void setViewSize(int w, int h) {
+        viewW = w;
+        viewH = h;
+        clamp();
+    }
 
     public GameCamera(int viewW, int viewH, int mapPixelW, int mapPixelH) {
         this.viewW = viewW;

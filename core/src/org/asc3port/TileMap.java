@@ -20,7 +20,7 @@ import com.badlogic.gdx.utils.Disposable;
  */
 public class TileMap implements Disposable {
 
-    public static final int TILE_SIZE = 16;
+    public static final int TILE_SIZE = 20; // тайлы 20×20 пикселей (не 16!)
     public static final int EMPTY_TILE = 255;
 
     /** Ширина и высота карты в тайлах */
@@ -102,7 +102,10 @@ public class TileMap implements Disposable {
         }
     }
 
-    /** Рисует frame тайла с верхним-левым углом в (px, py). */
+    /**
+     * Рисует frame тайла с верхним-левым углом ячейки в (px, py).
+     * bounds = [bx, by, bw, bh] — смещение и размер спрайта внутри ячейки TILE_SIZE×TILE_SIZE.
+     */
     private void drawTileFrame(SpriteBatch batch, int frameIdx, float px, float py) {
         ASprite.Frame frame = tileSet.frames[frameIdx];
         for (int fmi = frame.first; fmi < frame.first + frame.n; fmi++) {
@@ -112,18 +115,16 @@ public class TileMap implements Disposable {
             ASprite.Module mod = tileSet.modules[fm.m];
             if (mod.region == null) continue;
 
+            // fm.x, fm.y = смещение модуля внутри frame (уже учитывает bounds)
             float mx = px + fm.x;
             float my = py + fm.y;
 
-            // Трансформации (flip/rotate)
             boolean flipX = (fm.tr & 1) != 0;
             boolean flipY = (fm.tr & 2) != 0;
 
             if (flipX || flipY) {
-                float originX = mod.w / 2f;
-                float originY = mod.h / 2f;
                 batch.draw(mod.region,
-                    mx, my, originX, originY,
+                    mx, my, mod.w / 2f, mod.h / 2f,
                     mod.w, mod.h,
                     flipX ? -1f : 1f, flipY ? -1f : 1f,
                     0f);

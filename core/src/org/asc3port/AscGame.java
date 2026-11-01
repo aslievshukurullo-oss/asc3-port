@@ -7,7 +7,7 @@ import com.badlogic.gdx.graphics.OrthographicCamera;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
-import com.badlogic.gdx.utils.viewport.FitViewport;
+import com.badlogic.gdx.utils.viewport.ExtendViewport;
 import com.badlogic.gdx.utils.viewport.Viewport;
 
 /**
@@ -22,8 +22,10 @@ import com.badlogic.gdx.utils.viewport.Viewport;
  */
 public class AscGame extends ApplicationAdapter {
 
-    // Размеры — только полный экран
+    // Базовые размеры виртуального экрана (реальные обновляются в resize)
     public static final int VIEW_W = 480, VIEW_H = 320;
+    // Актуальные размеры после адаптации к экрану устройства
+    private int screenW = VIEW_W, screenH = VIEW_H;
 
     // Состояния
     private static final int STATE_INIT   = 1;
@@ -76,7 +78,8 @@ public class AscGame extends ApplicationAdapter {
     public void create() {
         cam = new OrthographicCamera();
         cam.setToOrtho(true, VIEW_W, VIEW_H); // y-down
-        viewport = new FitViewport(VIEW_W, VIEW_H, cam);
+        // ExtendViewport: минимум 480×320, расширяется на весь реальный экран без чёрных полос
+        viewport = new ExtendViewport(VIEW_W, VIEW_H, cam);
         batch = new SpriteBatch();
         shapes = new ShapeRenderer();
         font = new BitmapFont(true); // flipped для y-down
@@ -100,6 +103,13 @@ public class AscGame extends ApplicationAdapter {
     @Override
     public void resize(int w, int h) {
         viewport.update(w, h, true);
+        // Обновляем актуальные размеры виртуального экрана (ExtendViewport расширяет их)
+        screenW = (int) cam.viewportWidth;
+        screenH = (int) cam.viewportHeight;
+        // Пересчитываем GameCamera если она уже создана
+        if (gameCam != null && tileMap != null) {
+            gameCam.setViewSize(screenW, screenH);
+        }
     }
 
     @Override
@@ -133,10 +143,15 @@ public class AscGame extends ApplicationAdapter {
                     activateMenu(menuSel);
 
                 if (pad.touchJustDown) {
-                    int tapped = getTappedMenuItem(pad.touchX, pad.touchY);
-                    if (tapped >= 0) {
-                        if (tapped == menuSel) activateMenu(tapped);
-                        else menuSel = tapped;
+                    // Кнопка языка (верхний правый угол)
+                    if (pad.touchX >= screenW - 70 && pad.touchY <= 30) {
+                        Lang.toggleLang();
+                    } else {
+                        int tapped = getTappedMenuItem(pad.touchX, pad.touchY);
+                        if (tapped >= 0) {
+                            if (tapped == menuSel) activateMenu(tapped);
+                            else menuSel = tapped;
+                        }
                     }
                 }
                 break;
@@ -166,9 +181,10 @@ public class AscGame extends ApplicationAdapter {
     }
 
     private int getTappedMenuItem(float tx, float ty) {
+        int menuX = (int)(screenW / 2f - MENU_W / 2f);
         for (int i = 0; i < MENU_ITEMS.length; i++) {
             float itemY = MENU_Y0 + i * MENU_DY;
-            if (tx >= MENU_X - 20 && tx <= MENU_X + MENU_W + 20
+            if (tx >= menuX - 20 && tx <= menuX + MENU_W + 20
                     && ty >= itemY - 16 && ty <= itemY + 16) return i;
         }
         return -1;
@@ -189,7 +205,7 @@ public class AscGame extends ApplicationAdapter {
         try {
             tileMap  = new TileMap(1);
             player   = new Player(80, 200);
-            gameCam  = new GameCamera(VIEW_W, VIEW_H,
+            gameCam  = new GameCamera(screenW, screenH,
                                       tileMap.getPixelWidth(),
                                       tileMap.getPixelHeight());
             gameCam.snapTo(player.x, player.y);
@@ -264,51 +280,57 @@ public class AscGame extends ApplicationAdapter {
     private void drawSplash() {
         shapes.begin(ShapeRenderer.ShapeType.Filled);
         shapes.setColor(0.02f, 0.02f, 0.05f, 1f);
-        shapes.rect(0, 0, VIEW_W, VIEW_H);
+        shapes.rect(0, 0, screenW, screenH);
         shapes.end();
 
         batch.begin();
         if (splashSprite != null && splashSprite.frames.length > 0) {
             int fi = (stateTimer > 1.5f && splashSprite.frames.length > 1) ? 1 : 0;
-            splashSprite.drawFrame(batch, fi, VIEW_W / 2f, VIEW_H / 2f, 0);
+            splashSprite.drawFrame(batch, fi, screenW / 2f, screenH / 2f, 0);
         } else {
             font.setColor(1f, 0.85f, 0.2f, 1f);
-            font.draw(batch, "ASSASSIN'S CREED III", VIEW_W / 2f - 110, VIEW_H / 2f - 30);
+            font.draw(batch, "ASSASSIN'S CREED III", screenW / 2f - 110, screenH / 2f - 30);
             font.setColor(0.7f, 0.7f, 0.7f, 1f);
-            font.draw(batch, "Mobile Port", VIEW_W / 2f - 50, VIEW_H / 2f + 10);
+            font.draw(batch, "Mobile Port", screenW / 2f - 50, screenH / 2f + 10);
             font.setColor(0.4f, 0.4f, 0.4f, 1f);
-            font.draw(batch, "Tap to continue", VIEW_W / 2f - 70, VIEW_H - 30);
+            font.draw(batch, Lang.get("tap_continue"), screenW / 2f - 70, screenH - 30);
         }
         batch.end();
 
         float pct = Math.min(stateTimer / SPLASH_TIME, 1f);
         shapes.begin(ShapeRenderer.ShapeType.Filled);
         shapes.setColor(0.20f, 0.20f, 0.25f, 1f);
-        shapes.rect(40, VIEW_H - 18, VIEW_W - 80, 6);
+        shapes.rect(40, screenH - 18, screenW - 80, 6);
         shapes.setColor(0.9f, 0.7f, 0.1f, 1f);
-        shapes.rect(40, VIEW_H - 18, (VIEW_W - 80) * pct, 6);
+        shapes.rect(40, screenH - 18, (screenW - 80) * pct, 6);
         shapes.end();
     }
 
     private void drawMenu() {
+        float cx = screenW / 2f;
+        int menuX = (int)(cx - MENU_W / 2f);
+
         shapes.begin(ShapeRenderer.ShapeType.Filled);
         shapes.setColor(0.05f, 0.06f, 0.10f, 1f);
-        shapes.rect(0, 0, VIEW_W, VIEW_H);
+        shapes.rect(0, 0, screenW, screenH);
         shapes.setColor(0.12f, 0.10f, 0.03f, 1f);
-        shapes.rect(0, 0, 140, VIEW_H);
-        shapes.rect(VIEW_W - 140, 0, 140, VIEW_H);
+        shapes.rect(0, 0, menuX - 20, screenH);
+        shapes.rect(menuX + MENU_W + 20, 0, screenW - (menuX + MENU_W + 20), screenH);
         shapes.end();
 
         batch.begin();
         font.setColor(0.95f, 0.80f, 0.15f, 1f);
-        font.draw(batch, "ASSASSIN'S CREED III", VIEW_W / 2f - 120, 40);
+        font.draw(batch, "ASSASSIN'S CREED III", cx - 120, 40);
         font.setColor(0.5f, 0.5f, 0.5f, 1f);
-        font.draw(batch, "J2ME  Port", VIEW_W / 2f - 45, 68);
+        font.draw(batch, "J2ME  Port", cx - 45, 68);
+        // Кнопка языка (верхний правый угол)
+        font.setColor(0.7f, 0.7f, 0.3f, 1f);
+        font.draw(batch, "[" + Lang.currentLang() + "]", screenW - 50, 18);
         batch.end();
 
         shapes.begin(ShapeRenderer.ShapeType.Filled);
         shapes.setColor(0.5f, 0.4f, 0.1f, 1f);
-        shapes.rect(MENU_X - 20, 82, MENU_W + 40, 1);
+        shapes.rect(menuX - 20, 82, MENU_W + 40, 1);
         shapes.end();
 
         batch.begin();
@@ -319,60 +341,50 @@ public class AscGame extends ApplicationAdapter {
                 batch.end();
                 shapes.begin(ShapeRenderer.ShapeType.Filled);
                 shapes.setColor(0.22f, 0.18f, 0.04f, 0.9f);
-                shapes.rect(MENU_X - 10, itemY - 16, MENU_W + 20, 28);
+                shapes.rect(menuX - 10, itemY - 16, MENU_W + 20, 28);
                 shapes.setColor(0.9f, 0.7f, 0.1f, 1f);
-                shapes.rect(MENU_X - 10, itemY - 16, 3, 28);
+                shapes.rect(menuX - 10, itemY - 16, 3, 28);
                 shapes.end();
                 batch.begin();
             }
             font.setColor(sel ? 1f : 0.65f, sel ? 0.85f : 0.65f, sel ? 0.1f : 0.65f, 1f);
-            font.draw(batch, MENU_ITEMS[i], MENU_X + (sel ? 8 : 6), itemY + 8);
+            font.draw(batch, Lang.menuItem(i), menuX + (sel ? 8 : 6), itemY + 8);
         }
         font.setColor(0.35f, 0.35f, 0.35f, 1f);
-        font.draw(batch, "TAP to select  TAP again / OK to confirm", 60, VIEW_H - 10);
+        font.draw(batch, Lang.get("menu_hint"), 60, screenH - 10);
         batch.end();
     }
 
     private void drawGame() {
         if (tileMap == null || gameCam == null) return;
 
-        // Небо / фон
         shapes.begin(ShapeRenderer.ShapeType.Filled);
         shapes.setColor(0.35f, 0.55f, 0.75f, 1f);
-        shapes.rect(0, 0, VIEW_W, VIEW_H);
+        shapes.rect(0, 0, screenW, screenH);
         shapes.end();
 
         batch.begin();
+        tileMap.draw(batch, gameCam.x, gameCam.y, screenW, screenH);
+        if (player != null) player.draw(batch, gameCam.x, gameCam.y);
 
-        // Рисуем тайловую карту
-        tileMap.draw(batch, gameCam.x, gameCam.y, VIEW_W, VIEW_H);
-
-        // Рисуем игрока
-        if (player != null) {
-            player.draw(batch, gameCam.x, gameCam.y);
-        }
-
-        // HUD
         font.setColor(1f, 1f, 1f, 0.8f);
-        if (player != null) {
+        if (player != null)
             font.draw(batch, String.format("X:%.0f Y:%.0f", player.x, player.y), 125, 14);
-        }
         font.setColor(0.35f, 0.35f, 0.35f, 1f);
-        font.draw(batch, "L/R: move  OK: jump  L-soft: menu", 125, VIEW_H - 8);
-
+        font.draw(batch, Lang.get("game_hint"), 125, screenH - 8);
         batch.end();
     }
 
     private void drawSpriteViewer() {
         shapes.begin(ShapeRenderer.ShapeType.Filled);
         shapes.setColor(0.08f, 0.09f, 0.12f, 1f);
-        shapes.rect(0, 0, VIEW_W, VIEW_H);
+        shapes.rect(0, 0, screenW, screenH);
         shapes.end();
 
         if (curSprite == null) {
             batch.begin();
             font.setColor(1f, 0.3f, 0.3f, 1f);
-            font.draw(batch, "No sprite loaded", VIEW_W / 2f - 70, VIEW_H / 2f);
+            font.draw(batch, "No sprite loaded", screenW / 2f - 70, screenH / 2f);
             batch.end();
             return;
         }

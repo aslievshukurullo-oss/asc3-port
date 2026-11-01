@@ -17,7 +17,7 @@ import com.badlogic.gdx.utils.JsonValue;
 public class ASprite implements Disposable {
     public static final class Module { public int w, h, type, sx, sy; public TextureRegion region; }
     public static final class FrameModule { public int m, x, y, tr; }
-    public static final class Frame { public int n, first; }
+    public static final class Frame { public int n, first; public int bx, by, bw, bh; } // bounds = offset+size внутри ячейки тайла
     public static final class AnimFrame { public int frame, dur, x, y, tr; }
     public static final class Anim { public int n, first; }
 
@@ -56,7 +56,13 @@ public class ASprite implements Disposable {
         frames = new Frame[j.get("frames").size];
         i = 0;
         for (JsonValue v : j.get("frames")) {
-            Frame f = new Frame(); f.n = v.getInt("n"); f.first = v.getInt("first"); frames[i++] = f;
+            Frame f = new Frame(); f.n = v.getInt("n"); f.first = v.getInt("first");
+            JsonValue b = v.get("bounds");
+            if (b != null && b.size >= 4) {
+                f.bx = b.get(0).asInt(); f.by = b.get(1).asInt();
+                f.bw = b.get(2).asInt(); f.bh = b.get(3).asInt();
+            }
+            frames[i++] = f;
         }
         afs = new AnimFrame[j.get("animFrames").size];
         i = 0;

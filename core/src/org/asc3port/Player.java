@@ -20,11 +20,11 @@ import com.badlogic.gdx.utils.Disposable;
 public class Player implements Disposable {
 
     // Физические константы (в пикселях/сек)
-    private static final float WALK_SPEED  = 60f;
-    private static final float RUN_SPEED   = 120f;
-    private static final float JUMP_VY     = -300f;   // вверх = отрицательный y (y-down)
-    private static final float GRAVITY     = 600f;    // вниз = положительный y
-    private static final float MAX_FALL    = 400f;
+    private static final float WALK_SPEED  = 100f;
+    private static final float RUN_SPEED   = 200f;
+    private static final float JUMP_VY     = -380f;   // вверх = отрицательный y (y-down)
+    private static final float GRAVITY     = 700f;    // вниз = положительный y
+    private static final float MAX_FALL    = 500f;
 
     // Размер хитбокса (ширина, высота) в пикселях
     public static final int HIT_W = 14;
