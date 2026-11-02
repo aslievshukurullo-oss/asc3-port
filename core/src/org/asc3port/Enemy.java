@@ -64,15 +64,25 @@ public class Enemy implements Disposable {
     private float animTimer = 0;
     private static final float TICK = 1f / 25f;
 
+    // Индексы анимаций (p5_001 — guard/soldier)
+    // 0:  IDLE   — n=2, медленное дыхание
+    // 1:  WALK   — n=8, равномерная ходьба (frames 341,318-320...)
+    // 13: RUN    — n=6, быстрое движение
+    // 17: ATTACK — n=10, атака с паузой в конце (dur=5 last)
+    // 30: HIT    — n=8, получение урона (dur=4 first)
+    // 4:  DEAD   — n=4, смерть (dur=5 last, freeze)
     private static final int ANIM_IDLE   = 0;
     private static final int ANIM_WALK   = 1;
-    private static final int ANIM_ATTACK = 5;
+    private static final int ANIM_RUN    = 13;
+    private static final int ANIM_ATTACK = 17;
+    private static final int ANIM_HIT    = 30;
+    private static final int ANIM_DEAD   = 4;
 
     public Enemy(float startX, float startY) {
         x = startX;
         y = startY;
         try {
-            sprite = new ASprite("p6_000");
+            sprite = new ASprite("p5_001");
         } catch (Exception e) {
             sprite = null;
         }
@@ -259,10 +269,16 @@ public class Enemy implements Disposable {
     private void updateAnimation(float dt) {
         if (sprite == null || sprite.anims.length == 0) return;
         int newAnim;
-        if (state == State.ATTACK) {
-            newAnim = Math.min(ANIM_ATTACK, sprite.anims.length - 1);
+        if (state == State.DEAD) {
+            newAnim = safe(ANIM_DEAD);
+        } else if (state == State.HIT) {
+            newAnim = safe(ANIM_HIT);
+        } else if (state == State.ATTACK) {
+            newAnim = safe(ANIM_ATTACK);
+        } else if (Math.abs(vx) > 60) {
+            newAnim = safe(ANIM_RUN);
         } else if (vx != 0) {
-            newAnim = Math.min(ANIM_WALK, sprite.anims.length - 1);
+            newAnim = safe(ANIM_WALK);
         } else {
             newAnim = ANIM_IDLE;
         }
@@ -273,9 +289,21 @@ public class Enemy implements Disposable {
             int afIdx = an.first + animStep;
             if (afIdx < sprite.afs.length) {
                 int dur = Math.max(1, sprite.afs[afIdx].dur);
-                while (animTimer >= dur * TICK) { animTimer -= dur * TICK; animStep = (animStep + 1) % an.n; }
+                while (animTimer >= dur * TICK) {
+                    animTimer -= dur * TICK;
+                    // Атака и смерть не зацикливаются
+                    if (state == State.ATTACK || state == State.DEAD) {
+                        animStep = Math.min(animStep + 1, an.n - 1);
+                    } else {
+                        animStep = (animStep + 1) % an.n;
+                    }
+                }
             }
         }
+    }
+
+    private int safe(int idx) {
+        return Math.min(idx, sprite.anims.length - 1);
     }
 
     // ---------------------------------------------------------------

@@ -82,14 +82,25 @@ public class Player implements Disposable {
     private float invincTimer   = 0f;
     public boolean isDead       = false;
 
-    // Индексы анимаций
+    // Индексы анимаций (p5_000)
+    // 0: IDLE  — frames 11-13, n=5, дыхание
+    // 1: WALK  — frames 19-28, n=10, равномерная ходьба
+    // 3: RUN   — frames 29-36, n=8, бег
+    // 4: JUMP  — frames 231-237, n=7, прыжок
+    // 11: ATTACK— frames 50-61, n=13, лёгкая атака с паузой
+    // 20: HIT  — frames 96-98, n=3, получение урона
+    // 32: FALL — frames 48-49, n=2, падение
+    // 33: DEAD — frames 261x3, n=3, смерть (freeze)
+    // 38: HEAVY— frames 385+, n=34, тяжёлая атака
     private static final int ANIM_IDLE   = 0;
     private static final int ANIM_WALK   = 1;
-    private static final int ANIM_RUN    = 2;
-    private static final int ANIM_JUMP   = 3;
-    private static final int ANIM_FALL   = 4;
-    private static final int ANIM_ATTACK = 5;
-    private static final int ANIM_HEAVY  = 6;
+    private static final int ANIM_RUN    = 3;
+    private static final int ANIM_JUMP   = 4;
+    private static final int ANIM_FALL   = 32;
+    private static final int ANIM_ATTACK = 11;
+    private static final int ANIM_HEAVY  = 38;
+    private static final int ANIM_HIT    = 20;
+    private static final int ANIM_DEAD   = 33;
 
     // Предыдущие входы для edge-detection
     private int prevInput = 0;
@@ -111,7 +122,7 @@ public class Player implements Disposable {
     }
 
     public void update(float dt, TileMap map, int input) {
-        if (isDead) return;
+        if (isDead) { updateAnimation(dt); return; }
 
         // Edge-detection: кнопки нажатые только в этом кадре
         int justPressed = input & ~prevInput;
@@ -339,12 +350,14 @@ public class Player implements Disposable {
         if (sprite == null || sprite.anims.length == 0) return;
 
         int newAnim;
-        if (hitStunTimer > 0) {
-            newAnim = ANIM_IDLE; // зафриженный idle при хит-стане
+        if (isDead) {
+            newAnim = ANIM_DEAD;
+        } else if (hitStunTimer > 0) {
+            newAnim = ANIM_HIT;
         } else if (attackState == AttackState.HEAVY) {
-            newAnim = Math.min(ANIM_HEAVY, sprite.anims.length - 1);
+            newAnim = ANIM_HEAVY;
         } else if (attackState == AttackState.LIGHT) {
-            newAnim = Math.min(ANIM_ATTACK, sprite.anims.length - 1);
+            newAnim = ANIM_ATTACK;
         } else if (!onGround) {
             newAnim = (vy < 0) ? ANIM_JUMP : ANIM_FALL;
         } else if (vx != 0) {
