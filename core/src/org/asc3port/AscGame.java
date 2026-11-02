@@ -282,7 +282,8 @@ public class AscGame extends ApplicationAdapter {
                                      tileMap.getPixelWidth(),
                                      tileMap.getPixelHeight());
             gameCam.snapTo(player.x, player.y);
-            combat.spawnLevelEnemies(sx, sy);
+            int levelIdx = (levelMan != null) ? levelMan.getIndex() : 0;
+            combat.spawnLevelEnemies(levelIdx, sx, sy);
             gameLoaded     = true;
             useSpriteViewer = false;
         } catch (Exception e) {
