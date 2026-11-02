@@ -110,6 +110,7 @@ public class Player implements Disposable {
     private static final float JUMP_BUFFER   = 0.12f; // буфер нажатия прыжка
     private float coyoteTimer  = 0f;
     private float jumpBufTimer = 0f;
+    private boolean wasOnGround = false;
 
     public Player(float startX, float startY) {
         x = startX;
@@ -177,6 +178,7 @@ public class Player implements Disposable {
             onGround = false;
             coyoteTimer = 0;
             jumpBufTimer = 0;
+            SoundManager.get().playJump();
         }
 
         // Гравитация
@@ -184,10 +186,17 @@ public class Player implements Disposable {
         if (vy > MAX_FALL) vy = MAX_FALL;
 
         // Движение + коллизии
+        boolean groundBefore = onGround;
         x += vx * dt;
         resolveHorizontal(map);
         y += vy * dt;
         resolveVertical(map);
+
+        // Приземление
+        if (onGround && !groundBefore) SoundManager.get().playLand();
+
+        // Шаги
+        if (onGround && Math.abs(vx) > 10f) SoundManager.get().playFootstep();
 
         // Граница карты
         if (x < HIT_W / 2f) { x = HIT_W / 2f; vx = 0; }
@@ -251,6 +260,8 @@ public class Player implements Disposable {
         comboTimer   = 0;
         comboPending = false;
         attackHitActive = false;
+        if (type == AttackState.LIGHT) SoundManager.get().playLightHit();
+        else                           SoundManager.get().playHeavyHit();
     }
 
     /**
@@ -276,6 +287,9 @@ public class Player implements Disposable {
         if (health <= 0) {
             health = 0;
             isDead = true;
+            SoundManager.get().playPlayerDie();
+        } else {
+            SoundManager.get().playHurt();
         }
         hitStunTimer = HIT_STUN;
         invincTimer  = INVINCIBLE_TIME;

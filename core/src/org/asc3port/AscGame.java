@@ -109,6 +109,9 @@ public class AscGame extends ApplicationAdapter {
         // Загружаем сохранённый язык
         Lang.load();
 
+        // Инициализируем звук
+        SoundManager.get();
+
         state = STATE_SPLASH;
         stateTimer = 0;
     }
@@ -144,6 +147,7 @@ public class AscGame extends ApplicationAdapter {
                         || pad.touchJustDown) {
                     state = STATE_MENU;
                     stateTimer = 0;
+                    SoundManager.get().playMenuMusic();
                 }
                 break;
 
@@ -187,6 +191,7 @@ public class AscGame extends ApplicationAdapter {
 
         // Возврат в меню
         if ((pad.pressed & Keys.SOFT_L) != 0) {
+            SoundManager.get().playMenuMusic();
             state = STATE_MENU; stateTimer = 0; return;
         }
 
@@ -194,7 +199,10 @@ public class AscGame extends ApplicationAdapter {
         if (player.isDead) {
             deathTimer += dt;
             gameCam.update(player.x, player.y);
-            if (deathTimer > 2.2f) { state = STATE_MENU; stateTimer = 0; }
+            if (deathTimer > 2.2f) {
+                SoundManager.get().playMenuMusic();
+                state = STATE_MENU; stateTimer = 0;
+            }
             return;
         }
 
@@ -211,17 +219,22 @@ public class AscGame extends ApplicationAdapter {
         // Чекпоинт
         if (checkpoint != null) {
             int ln = levelMan != null ? levelMan.getLevelNum() : 1;
-            if (checkpoint.update(player, ln) && hud != null)
+            if (checkpoint.update(player, ln) && hud != null) {
                 hud.showNotification(Lang.get("checkpoint"));
+                SoundManager.get().playCheckpoint();
+            }
         }
 
         gameCam.update(player.x, player.y);
 
         // Конец уровня
         if (LevelManager.isAtLevelEnd(player, tileMap)) {
+            SoundManager.get().playLevelEnd();
             state = STATE_LEVEL_TRANS;
             transTimer = 0;
         }
+
+        SoundManager.get().update(dt);
     }
 
     private int getTappedMenuItem(float tx, float ty) {
@@ -286,6 +299,7 @@ public class AscGame extends ApplicationAdapter {
             combat.spawnLevelEnemies(levelIdx, sx, sy);
             gameLoaded     = true;
             useSpriteViewer = false;
+            SoundManager.get().playGameMusic();
         } catch (Exception e) {
             gameLoaded     = false;
             useSpriteViewer = true;

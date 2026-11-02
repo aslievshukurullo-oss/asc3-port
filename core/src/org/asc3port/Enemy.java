@@ -203,12 +203,14 @@ public class Enemy implements Disposable {
             state = State.DEAD;
             stateTimer = 0;
             vx = 0;
+            SoundManager.get().playEnemyDie();
             return;
         }
         state = State.HIT;
         stateTimer = 0;
         vx = (x > fromX ? 1f : -1f) * 60f;
         vy = -80f;
+        SoundManager.get().playHurt();
     }
 
     // ---------------------------------------------------------------
