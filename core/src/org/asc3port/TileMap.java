@@ -134,6 +134,28 @@ public class TileMap implements Disposable {
         }
     }
 
+    /**
+     * Находит стартовую позицию игрока — над первой твёрдой платформой слева.
+     * @return float[]{x, y} в пикселях (y = ноги игрока, y-down)
+     */
+    public float[] findSpawn() {
+        // Ищем первую колонку с твёрдым тайлом слева
+        for (int tx = 0; tx < Math.min(20, mapW); tx++) {
+            // Ищем снизу вверх первую твёрдую поверхность
+            for (int ty = mapH - 1; ty >= 0; ty--) {
+                int t = getTile(0, tx, ty);
+                if (t != EMPTY_TILE && t != 0) {
+                    // Стоим над этим тайлом
+                    float spawnX = tx * TILE_SIZE + TILE_SIZE / 2f;
+                    float spawnY = ty * TILE_SIZE; // ноги на верхнем крае тайла
+                    return new float[]{ spawnX, spawnY };
+                }
+            }
+        }
+        // Запасной вариант
+        return new float[]{ 3 * TILE_SIZE, 50 * TILE_SIZE };
+    }
+
     /** Ширина карты в пикселях */
     public int getPixelWidth()  { return mapW * TILE_SIZE; }
     /** Высота карты в пикселях */

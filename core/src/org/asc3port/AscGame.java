@@ -204,7 +204,9 @@ public class AscGame extends ApplicationAdapter {
         // Пробуем загрузить TileMap уровня 1
         try {
             tileMap  = new TileMap(1);
-            player   = new Player(80, 200);
+            // Автоматически ищем spawn point — первая твёрдая земля слева
+            float[] spawn = tileMap.findSpawn();
+            player   = new Player(spawn[0], spawn[1]);
             gameCam  = new GameCamera(screenW, screenH,
                                       tileMap.getPixelWidth(),
                                       tileMap.getPixelHeight());
