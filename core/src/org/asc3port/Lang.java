@@ -74,6 +74,19 @@ public class Lang {
         // Бонусно: уведомление о языке
         EN.put("lang_switched", "English");
         RU.put("lang_switched", "Русский");
+
+        // Игровые события
+        EN.put("you_died",       "YOU DIED");
+        RU.put("you_died",       "ВЫ ПОГИБЛИ");
+
+        EN.put("returning_menu", "Returning to menu...");
+        RU.put("returning_menu", "Возврат в меню...");
+
+        EN.put("checkpoint",     "Checkpoint!");
+        RU.put("checkpoint",     "Чекпоинт!");
+
+        EN.put("enemy_defeated", "Enemy defeated");
+        RU.put("enemy_defeated", "Враг побеждён");
     }
 
     /** Получить строку по ключу на текущем языке. */

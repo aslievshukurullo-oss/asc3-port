@@ -62,7 +62,15 @@ public class AscGame extends ApplicationAdapter {
     private GameCamera gameCam;
     private CombatSystem combat;
     private Checkpoint checkpoint;
+    private LevelManager levelMan;
+    private GameHUD hud;
+    private float deathTimer = 0f;
     private boolean gameLoaded = false;
+
+    // Переход между уровнями
+    private static final int STATE_LEVEL_TRANS = 8;
+    private float transTimer = 0f;
+    private static final float TRANS_DURATION = 1.5f;
 
     // Запасной просмотрщик спрайтов (если карта не загрузится)
     private String[] spriteNames;
@@ -162,37 +170,57 @@ public class AscGame extends ApplicationAdapter {
                 break;
 
             case STATE_GAME:
-                if (useSpriteViewer) {
-                    updateSpriteViewer(dt);
-                } else {
-                    updateGame(dt);
-                }
+                if (useSpriteViewer) updateSpriteViewer(dt);
+                else                 updateGame(dt);
+                break;
+
+            case STATE_LEVEL_TRANS:
+                transTimer += dt;
+                if (transTimer >= TRANS_DURATION) loadNextLevel();
                 break;
         }
     }
 
     private void updateGame(float dt) {
         if (player == null || tileMap == null) return;
+        if (hud != null) hud.update(dt);
 
         // Возврат в меню
         if ((pad.pressed & Keys.SOFT_L) != 0) {
-            state = STATE_MENU;
-            stateTimer = 0;
+            state = STATE_MENU; stateTimer = 0; return;
+        }
+
+        // Смерть
+        if (player.isDead) {
+            deathTimer += dt;
+            gameCam.update(player.x, player.y);
+            if (deathTimer > 2.2f) { state = STATE_MENU; stateTimer = 0; }
             return;
         }
 
         player.update(dt, tileMap, pad.held);
-        if (combat    != null) combat.update(dt, tileMap, player);
-        if (checkpoint != null) checkpoint.update(player, 1);
+
+        // Боёвка + очки за убийство
+        if (combat != null) {
+            int beforeCount = combat.getEnemies().size();
+            combat.update(dt, tileMap, player);
+            int killed = beforeCount - combat.getEnemies().size();
+            if (killed > 0 && hud != null) hud.addScore(killed * 100);
+        }
+
+        // Чекпоинт
+        if (checkpoint != null) {
+            int ln = levelMan != null ? levelMan.getLevelNum() : 1;
+            if (checkpoint.update(player, ln) && hud != null)
+                hud.showNotification(Lang.get("checkpoint"));
+        }
+
         gameCam.update(player.x, player.y);
 
-        // Смерть игрока — возврат в меню через 2 сек
-        if (player.isDead) {
-            stateTimer += dt;
-            if (stateTimer > 2.0f) {
-                state = STATE_MENU;
-                stateTimer = 0;
-            }
+        // Конец уровня
+        if (LevelManager.isAtLevelEnd(player, tileMap)) {
+            state = STATE_LEVEL_TRANS;
+            transTimer = 0;
         }
     }
 
@@ -215,23 +243,33 @@ public class AscGame extends ApplicationAdapter {
     }
 
     private void startGame() {
+        if (levelMan == null) levelMan = new LevelManager();
+        levelMan.setIndex(0);
+        hud = new GameHUD();
         startGameAt(null, true);
     }
 
     private void continueGame() {
         float[] saved = Checkpoint.load();
+        if (saved == null) { startGame(); return; }
+        if (levelMan == null) levelMan = new LevelManager();
+        levelMan.setIndex(LevelManager.indexOfLevelNum((int) saved[2]));
+        hud = new GameHUD();
         startGameAt(saved, false);
     }
 
     private void startGameAt(float[] savedPos, boolean newGame) {
         if (combat != null) combat.clear();
-        combat    = new CombatSystem();
+        combat     = new CombatSystem();
         checkpoint = new Checkpoint();
+        deathTimer = 0f;
 
         if (newGame) Checkpoint.clear();
 
+        int levelNum = (levelMan != null) ? levelMan.getLevelNum() : 1;
         try {
-            tileMap = new TileMap(1);
+            if (tileMap != null) { tileMap.dispose(); tileMap = null; }
+            tileMap = new TileMap(levelNum);
             float sx, sy;
             if (savedPos != null) {
                 sx = savedPos[0]; sy = savedPos[1];
@@ -254,6 +292,18 @@ public class AscGame extends ApplicationAdapter {
         }
         state      = STATE_GAME;
         stateTimer = 0;
+    }
+
+    /** Перейти на следующий уровень. */
+    private void loadNextLevel() {
+        if (levelMan != null && levelMan.hasNext()) {
+            levelMan.next();
+            startGameAt(null, false);
+        } else {
+            // Игра пройдена — возврат в меню
+            state = STATE_MENU;
+            stateTimer = 0;
+        }
     }
 
     // ─── Просмотрщик спрайтов (запасной режим) ───────────────────────────────
@@ -307,6 +357,7 @@ public class AscGame extends ApplicationAdapter {
                 if (useSpriteViewer) drawSpriteViewer();
                 else                 drawGame();
                 break;
+            case STATE_LEVEL_TRANS: drawLevelTrans(); break;
         }
 
         pad.draw(shapes, batch, font);
@@ -458,41 +509,14 @@ public class AscGame extends ApplicationAdapter {
         if (player != null) player.draw(batch, gameCam.x, gameCam.y);
         batch.end();
 
-        // HUD здоровья (ниже SpriteBatch — поверх всего через ShapeRenderer)
-        if (player != null) drawHUD();
-    }
-
-    private void drawHUD() {
-        final int HP_X = 125, HP_Y = 10;
-        final int HP_W = 80,  HP_H = 8;
-        final int HP_PAD = 2;
-
-        shapes.begin(ShapeRenderer.ShapeType.Filled);
-        // Тёмный фон полосы HP
-        shapes.setColor(0.1f, 0.1f, 0.1f, 0.75f);
-        shapes.rect(HP_X - HP_PAD, HP_Y - HP_PAD, HP_W + HP_PAD * 2, HP_H + HP_PAD * 2);
-        // Красная полоса HP
-        float hpPct = (float) player.health / player.maxHealth;
-        float hpColor_r = 0.2f + hpPct * 0.6f;
-        shapes.setColor(hpColor_r, hpPct * 0.6f, 0.05f, 1f);
-        shapes.rect(HP_X, HP_Y, HP_W * hpPct, HP_H);
-        // Зелёный если много здоровья
-        if (hpPct > 0.6f) shapes.setColor(0.15f, 0.75f, 0.15f, 1f);
-        shapes.rect(HP_X, HP_Y, HP_W * Math.min(hpPct, 1f), HP_H);
-
-        // BACK кнопка (правый угол)
-        shapes.setColor(0.1f, 0.1f, 0.1f, 0.65f);
-        shapes.rect(screenW - 68, 4, 50, 16);
-        shapes.end();
-
-        batch.begin();
-        font.setColor(1f, 1f, 1f, 0.9f);
-        font.getData().setScale(1.1f);
-        font.draw(batch, "HP", HP_X - 20, HP_Y + HP_H - 1);
-        font.setColor(1f, 0.85f, 0.3f, 0.95f);
-        font.draw(batch, "BACK", screenW - 64f, HP_Y + HP_H - 1);
+        // HUD здоровья, счёт, уведомления
+        if (player != null && hud != null) {
+            hud.draw(shapes, batch, font, player, screenW, screenH);
+            if (player.isDead) hud.drawDeathScreen(shapes, batch, font, deathTimer, screenW, screenH);
+        }
 
         // Отладка (координаты и стейт)
+        batch.begin();
         font.setColor(0.5f, 0.5f, 0.5f, 0.65f);
         font.getData().setScale(0.85f);
         if (player != null)
@@ -502,6 +526,44 @@ public class AscGame extends ApplicationAdapter {
                 player.attackState.name()), 125, screenH - 8);
         font.getData().setScale(1.4f);
         batch.end();
+    }
+
+    private void drawLevelTrans() {
+        // Отрисовываем уровень как фон
+        if (tileMap != null && gameCam != null) {
+            shapes.begin(ShapeRenderer.ShapeType.Filled);
+            int skyBands = 8;
+            float bandH = (float) screenH / skyBands;
+            for (int i = 0; i < skyBands; i++) {
+                float t = (float) i / (skyBands - 1);
+                shapes.setColor(0.25f + t * 0.25f, 0.45f + t * 0.27f, 0.70f + t * 0.20f, 1f);
+                shapes.rect(0, i * bandH, screenW, bandH + 1);
+            }
+            shapes.end();
+            batch.begin();
+            tileMap.draw(batch, gameCam.x, gameCam.y, screenW, screenH);
+            batch.end();
+        }
+
+        // Fade-to-black оверлей
+        float alpha = Math.min(transTimer / TRANS_DURATION, 1f);
+        shapes.begin(ShapeRenderer.ShapeType.Filled);
+        shapes.setColor(0f, 0f, 0f, alpha);
+        shapes.rect(0, 0, screenW, screenH);
+        shapes.end();
+
+        // Текст уровня появляется в середине перехода
+        if (transTimer > TRANS_DURATION * 0.3f && levelMan != null) {
+            float textAlpha = Math.min((transTimer - TRANS_DURATION * 0.3f) / (TRANS_DURATION * 0.3f), 1f);
+            int nextIndex = levelMan.getIndex(); // уже переключён или нет?
+            batch.begin();
+            font.getData().setScale(1.8f);
+            font.setColor(0.95f, 0.80f, 0.15f, textAlpha);
+            String lvlText = "LEVEL " + (nextIndex + 1);
+            font.draw(batch, lvlText, screenW / 2f - lvlText.length() * 6f, screenH / 2f);
+            font.getData().setScale(1.4f);
+            batch.end();
+        }
     }
 
     private void drawSpriteViewer() {
