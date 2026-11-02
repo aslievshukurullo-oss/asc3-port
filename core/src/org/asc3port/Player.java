@@ -94,6 +94,12 @@ public class Player implements Disposable {
     // Предыдущие входы для edge-detection
     private int prevInput = 0;
 
+    // Coyote time — можно прыгнуть чуть позже края платформы
+    private static final float COYOTE_TIME   = 0.12f;
+    private static final float JUMP_BUFFER   = 0.12f; // буфер нажатия прыжка
+    private float coyoteTimer  = 0f;
+    private float jumpBufTimer = 0f;
+
     public Player(float startX, float startY) {
         x = startX;
         y = startY;
@@ -128,6 +134,18 @@ public class Player implements Disposable {
         // Движение блокировано во время удара
         boolean inAttack = attackState != AttackState.NONE;
 
+        // Coyote time: считаем время с последнего момента на земле
+        if (onGround) {
+            coyoteTimer = COYOTE_TIME;
+        } else if (coyoteTimer > 0) {
+            coyoteTimer -= dt;
+        }
+
+        // Jump buffer: запоминаем нажатие прыжка заранее
+        boolean jumpPressed = (justPressed & Keys.FIRE) != 0;
+        if (jumpPressed) jumpBufTimer = JUMP_BUFFER;
+        else if (jumpBufTimer > 0) jumpBufTimer -= dt;
+
         // Горизонтальное движение (только вне атаки или в воздухе)
         if (!inAttack || !onGround) {
             boolean moveLeft  = (input & Keys.LEFT)  != 0;
@@ -138,14 +156,16 @@ public class Player implements Disposable {
             if (moveLeft)  { vx = -speed; facingRight = false; }
             if (moveRight) { vx =  speed; facingRight = true;  }
         } else {
-            vx = 0; // стоим на месте при ударе
+            vx = 0;
         }
 
-        // Прыжок (только не во время атаки на земле)
-        boolean jumpPressed = (justPressed & Keys.FIRE) != 0;
-        if (jumpPressed && onGround && !inAttack) {
+        // Прыжок: coyote time + jump buffer
+        boolean canJump = coyoteTimer > 0 && vy >= 0;
+        if (jumpBufTimer > 0 && canJump && !inAttack) {
             vy = JUMP_VY;
             onGround = false;
+            coyoteTimer = 0;
+            jumpBufTimer = 0;
         }
 
         // Гравитация

@@ -61,6 +61,7 @@ public class AscGame extends ApplicationAdapter {
     private Player player;
     private GameCamera gameCam;
     private CombatSystem combat;
+    private Checkpoint checkpoint;
     private boolean gameLoaded = false;
 
     // Запасной просмотрщик спрайтов (если карта не загрузится)
@@ -181,7 +182,8 @@ public class AscGame extends ApplicationAdapter {
         }
 
         player.update(dt, tileMap, pad.held);
-        if (combat != null) combat.update(dt, tileMap, player);
+        if (combat    != null) combat.update(dt, tileMap, player);
+        if (checkpoint != null) checkpoint.update(player, 1);
         gameCam.update(player.x, player.y);
 
         // Смерть игрока — возврат в меню через 2 сек
@@ -206,40 +208,51 @@ public class AscGame extends ApplicationAdapter {
 
     private void activateMenu(int item) {
         switch (item) {
-            case 0: // NEW GAME
-                startGame();
-                break;
-            default:
-                break;
+            case 0: startGame();    break; // NEW GAME
+            case 1: continueGame(); break; // CONTINUE
+            default: break;
         }
     }
 
     private void startGame() {
-        // Чистим старую боёвку если была
-        if (combat != null) combat.clear();
-        combat = new CombatSystem();
+        startGameAt(null, true);
+    }
 
-        // Пробуем загрузить TileMap уровня 1
+    private void continueGame() {
+        float[] saved = Checkpoint.load();
+        startGameAt(saved, false);
+    }
+
+    private void startGameAt(float[] savedPos, boolean newGame) {
+        if (combat != null) combat.clear();
+        combat    = new CombatSystem();
+        checkpoint = new Checkpoint();
+
+        if (newGame) Checkpoint.clear();
+
         try {
-            tileMap  = new TileMap(1);
-            // Автоматически ищем spawn point — первая твёрдая земля слева
-            float[] spawn = tileMap.findSpawn();
-            player   = new Player(spawn[0], spawn[1]);
-            gameCam  = new GameCamera(screenW, screenH,
-                                      tileMap.getPixelWidth(),
-                                      tileMap.getPixelHeight());
+            tileMap = new TileMap(1);
+            float sx, sy;
+            if (savedPos != null) {
+                sx = savedPos[0]; sy = savedPos[1];
+            } else {
+                float[] spawn = tileMap.findSpawn();
+                sx = spawn[0]; sy = spawn[1];
+            }
+            player  = new Player(sx, sy);
+            gameCam = new GameCamera(screenW, screenH,
+                                     tileMap.getPixelWidth(),
+                                     tileMap.getPixelHeight());
             gameCam.snapTo(player.x, player.y);
-            // Расставляем врагов правее спавна
-            combat.spawnLevelEnemies(spawn[0], spawn[1]);
-            gameLoaded = true;
+            combat.spawnLevelEnemies(sx, sy);
+            gameLoaded     = true;
             useSpriteViewer = false;
         } catch (Exception e) {
-            // Карта не загрузилась — используем просмотрщик спрайтов
-            gameLoaded = false;
+            gameLoaded     = false;
             useSpriteViewer = true;
             loadSprite(0);
         }
-        state = STATE_GAME;
+        state      = STATE_GAME;
         stateTimer = 0;
     }
 
