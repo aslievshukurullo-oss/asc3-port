@@ -9,9 +9,24 @@ import com.badlogic.gdx.math.Vector2;
 import com.badlogic.gdx.utils.viewport.Viewport;
 
 /**
- * Экранные кнопки для горизонтального режима (480x320, y-down).
+ * Экранные кнопки для горизонтального режима.
+ *
+ * Расположение (виртуальный экран 480×320, y-down):
+ *
+ *  Левая сторона — крестовина:
+ *    Вверх:    (62, 185)
+ *    Вниз:     (62, 285)
+ *    Влево:    (16, 235)
+ *    Вправо:  (108, 235)
+ *
+ *  Правая сторона — Action кнопки:
+ *    OK (прыжок): (430, 245) r=38
+ *    RUN:         (380, 195) r=28
+ *
+ *  Верхний правый угол — BACK:
+ *    BACK (ESC):  (455, 22)  r=20
+ *
  * D-pad и кнопки видны ТОЛЬКО в STATE_GAME (gameMode=true).
- * В меню/заставке — только обработка кликов по меню.
  */
 public class TouchOverlay {
     private static final int MAX_POINTERS = 10;
@@ -20,28 +35,27 @@ public class TouchOverlay {
         final String label;
         final int bit;
         final float cx, cy, r;
+        final boolean important; // выделить яркостью?
+        Btn(String l, int b, float x, float y, float r, boolean imp) {
+            label = l; bit = b; cx = x; cy = y; this.r = r; important = imp;
+        }
         Btn(String l, int b, float x, float y, float r) {
-            label = l; bit = b; cx = x; cy = y; this.r = r;
+            this(l, b, x, y, r, false);
         }
     }
 
-    // Левая панель: крестовина + * #
-    // Правая панель: OK (FIRE), цифры, левый/правый софт
+    // Кнопки
     private final Btn[] btns = {
-        new Btn("^",  Keys.UP,     60,  188, 26),
-        new Btn("v",  Keys.DOWN,   60,  276, 26),
-        new Btn("<",  Keys.LEFT,   18,  232, 26),
-        new Btn(">",  Keys.RIGHT, 102,  232, 26),
-        new Btn("OK", Keys.FIRE,  420,  240, 38),
-        new Btn("1",  Keys.NUM1,  378,  148, 20),
-        new Btn("5",  Keys.NUM5,  420,  148, 20),
-        new Btn("3",  Keys.NUM3,  462,  148, 20),
-        new Btn("7",  Keys.NUM7,  378,  190, 20),
-        new Btn("9",  Keys.NUM9,  462,  190, 20),
-        new Btn("L",  Keys.SOFT_L, 378, 30,  22),
-        new Btn("R",  Keys.SOFT_R, 462, 30,  22),
-        new Btn("*",  Keys.STAR,   30,  30,  22),
-        new Btn("#",  Keys.POUND,  90,  30,  22),
+        // D-pad
+        new Btn("^",    Keys.UP,     62,  185, 30),
+        new Btn("v",    Keys.DOWN,   62,  285, 30),
+        new Btn("<",    Keys.LEFT,   16,  235, 30),
+        new Btn(">",    Keys.RIGHT, 108,  235, 30),
+        // Действия справа
+        new Btn("OK",   Keys.FIRE,  430,  245, 40, true),  // Прыжок / подтверждение
+        new Btn("RUN",  Keys.NUM7,  375,  195, 28),        // Бег (NUM7)
+        // Навигация
+        new Btn("BACK", Keys.SOFT_L, 455, 22,  20),        // ESC / меню
     };
 
     private final Vector2 tmp = new Vector2();
@@ -84,7 +98,7 @@ public class TouchOverlay {
                 viewport.unproject(tmp);
                 for (Btn b : btns) {
                     float dx = tmp.x - b.cx, dy = tmp.y - b.cy;
-                    float rr = b.r + 8;
+                    float rr = b.r + 8; // зона касания чуть больше визуальной
                     if (dx * dx + dy * dy <= rr * rr) now |= b.bit;
                 }
             }
@@ -97,6 +111,8 @@ public class TouchOverlay {
         if (Gdx.input.isKeyPressed(com.badlogic.gdx.Input.Keys.RIGHT)) now |= Keys.RIGHT;
         if (Gdx.input.isKeyPressed(com.badlogic.gdx.Input.Keys.ENTER) ||
             Gdx.input.isKeyPressed(com.badlogic.gdx.Input.Keys.SPACE)) now |= Keys.FIRE;
+        if (Gdx.input.isKeyPressed(com.badlogic.gdx.Input.Keys.SHIFT_LEFT) ||
+            Gdx.input.isKeyPressed(com.badlogic.gdx.Input.Keys.SHIFT_RIGHT)) now |= Keys.NUM7;
         if (Gdx.input.isKeyPressed(com.badlogic.gdx.Input.Keys.ESCAPE)) now |= Keys.SOFT_L;
 
         pressed  = now & ~held;
@@ -111,23 +127,37 @@ public class TouchOverlay {
         sr.begin(ShapeRenderer.ShapeType.Filled);
         for (Btn b : btns) {
             boolean on = (held & b.bit) != 0;
-            sr.setColor(on ? 0.85f : 0.20f,
-                        on ? 0.75f : 0.22f,
-                        on ? 0.25f : 0.28f, 0.80f);
+            if (b.important) {
+                // OK кнопка — ярко красная
+                sr.setColor(on ? 1.0f : 0.75f,
+                            on ? 0.3f : 0.15f,
+                            on ? 0.1f : 0.15f, 0.85f);
+            } else {
+                sr.setColor(on ? 0.80f : 0.18f,
+                            on ? 0.70f : 0.20f,
+                            on ? 0.20f : 0.26f, 0.75f);
+            }
             sr.circle(b.cx, b.cy, b.r);
         }
         sr.end();
+
         // Обводка
         sr.begin(ShapeRenderer.ShapeType.Line);
-        sr.setColor(0.55f, 0.55f, 0.60f, 1f);
-        for (Btn b : btns) sr.circle(b.cx, b.cy, b.r);
-        sr.end();
-        // Метки
-        sb.begin();
-        font.setColor(Color.WHITE);
         for (Btn b : btns) {
-            float fw = b.label.length() * 5f;
-            font.draw(sb, b.label, b.cx - fw, b.cy + 5);
+            boolean on = (held & b.bit) != 0;
+            sr.setColor(on ? 1f : 0.5f, on ? 0.9f : 0.5f, on ? 0.3f : 0.55f, 1f);
+            sr.circle(b.cx, b.cy, b.r);
+        }
+        sr.end();
+
+        // Метки кнопок
+        sb.begin();
+        for (Btn b : btns) {
+            boolean on = (held & b.bit) != 0;
+            font.setColor(on ? Color.YELLOW : Color.WHITE);
+            // Центрируем текст
+            float fw = b.label.length() * 5.5f;
+            font.draw(sb, b.label, b.cx - fw / 2f, b.cy + 5.5f);
         }
         sb.end();
     }

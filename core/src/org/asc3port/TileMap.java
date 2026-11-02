@@ -29,8 +29,8 @@ public class TileMap implements Disposable {
     /** Слои: layer[0] = foreground (009.bin), layer[1] = background (010.bin) */
     private final byte[][] layers;
 
-    /** Тайловые спрайты */
-    private final ASprite tileSet;
+    /** Тайловые спрайты: [0]=foreground (p8_002), [1]=background (p9_002) */
+    private final ASprite[] tileSets;
 
     /** Номер уровня (1-9), соответствует raw/11+n/ */
     public final int levelNum;
@@ -49,8 +49,22 @@ public class TileMap implements Disposable {
         layers[0] = Gdx.files.internal(rawDir + "009.bin").readBytes(); // foreground
         layers[1] = Gdx.files.internal(rawDir + "010.bin").readBytes(); // background
 
-        // Загружаем тайловый спрайтовый пак
-        tileSet = new ASprite("p8_002");
+        // Загружаем тайловые спрайтовые паки
+        tileSets = new ASprite[2];
+        tileSets[0] = loadSpriteSafe("p8_002"); // foreground tiles
+        tileSets[1] = loadSpriteSafe("p9_002"); // background tiles
+    }
+
+    /** Безопасная загрузка спрайта — возвращает null если файл не существует. */
+    private ASprite loadSpriteSafe(String name) {
+        try {
+            if (Gdx.files.internal("sprites/" + name + ".json").exists()) {
+                return new ASprite(name);
+            }
+        } catch (Exception e) {
+            Gdx.app.log("TileMap", "Cannot load sprite " + name + ": " + e.getMessage());
+        }
+        return null;
     }
 
     /**
@@ -74,8 +88,6 @@ public class TileMap implements Disposable {
      * @param viewH    высота видимой области
      */
     public void draw(SpriteBatch batch, float camX, float camY, int viewW, int viewH) {
-        if (tileSet == null) return;
-
         // Диапазон тайлов для рендеринга (с запасом +1)
         int tileX0 = Math.max(0, (int)(camX / TILE_SIZE));
         int tileY0 = Math.max(0, (int)(camY / TILE_SIZE));
@@ -84,19 +96,21 @@ public class TileMap implements Disposable {
 
         // Рисуем сначала фон (layer 1), потом передний план (layer 0)
         for (int layer = 1; layer >= 0; layer--) {
+            ASprite ts = tileSets[layer];
+            if (ts == null) continue; // пак не загружен — пропускаем слой
             for (int ty = tileY0; ty <= tileY1; ty++) {
                 for (int tx = tileX0; tx <= tileX1; tx++) {
                     int tileId = getTile(layer, tx, ty);
                     if (tileId == EMPTY_TILE || tileId == 0) continue;
 
                     int frameIdx = tileId - 1; // 1-based -> 0-based
-                    if (frameIdx < 0 || frameIdx >= tileSet.frames.length) continue;
+                    if (frameIdx < 0 || frameIdx >= ts.frames.length) continue;
 
                     // Пиксельная позиция тайла (левый верхний угол)
                     float px = tx * TILE_SIZE - camX;
                     float py = ty * TILE_SIZE - camY;
 
-                    drawTileFrame(batch, frameIdx, px, py);
+                    drawTileFrame(batch, ts, frameIdx, px, py);
                 }
             }
         }
@@ -104,18 +118,17 @@ public class TileMap implements Disposable {
 
     /**
      * Рисует frame тайла с верхним-левым углом ячейки в (px, py).
-     * bounds = [bx, by, bw, bh] — смещение и размер спрайта внутри ячейки TILE_SIZE×TILE_SIZE.
+     * @param ts    тайловый спрайтовый пак
      */
-    private void drawTileFrame(SpriteBatch batch, int frameIdx, float px, float py) {
-        ASprite.Frame frame = tileSet.frames[frameIdx];
+    private void drawTileFrame(SpriteBatch batch, ASprite ts, int frameIdx, float px, float py) {
+        ASprite.Frame frame = ts.frames[frameIdx];
         for (int fmi = frame.first; fmi < frame.first + frame.n; fmi++) {
-            if (fmi >= tileSet.fms.length) break;
-            ASprite.FrameModule fm = tileSet.fms[fmi];
-            if (fm.m < 0 || fm.m >= tileSet.modules.length) continue;
-            ASprite.Module mod = tileSet.modules[fm.m];
+            if (fmi >= ts.fms.length) break;
+            ASprite.FrameModule fm = ts.fms[fmi];
+            if (fm.m < 0 || fm.m >= ts.modules.length) continue;
+            ASprite.Module mod = ts.modules[fm.m];
             if (mod.region == null) continue;
 
-            // fm.x, fm.y = смещение модуля внутри frame (уже учитывает bounds)
             float mx = px + fm.x;
             float my = py + fm.y;
 
@@ -163,6 +176,8 @@ public class TileMap implements Disposable {
 
     @Override
     public void dispose() {
-        if (tileSet != null) tileSet.dispose();
+        for (ASprite ts : tileSets) {
+            if (ts != null) ts.dispose();
+        }
     }
 }

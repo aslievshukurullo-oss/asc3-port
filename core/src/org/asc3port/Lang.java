@@ -1,5 +1,7 @@
 package org.asc3port;
 
+import com.badlogic.gdx.Gdx;
+import com.badlogic.gdx.Preferences;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -88,9 +90,36 @@ public class Lang {
         return items[i][0];
     }
 
-    /** Переключить язык. */
+    private static final String PREFS_NAME = "asc3port";
+    private static final String PREFS_KEY  = "lang_russian";
+
+    /**
+     * Загрузить сохранённый язык при старте приложения.
+     * Вызывать один раз в AscGame.create().
+     */
+    public static void load() {
+        try {
+            Preferences prefs = Gdx.app.getPreferences(PREFS_NAME);
+            russian = prefs.getBoolean(PREFS_KEY, false);
+        } catch (Exception e) {
+            russian = false; // не критично — используем дефолт
+        }
+    }
+
+    /** Переключить язык и сохранить выбор. */
     public static void toggleLang() {
         russian = !russian;
+        save();
+    }
+
+    private static void save() {
+        try {
+            Preferences prefs = Gdx.app.getPreferences(PREFS_NAME);
+            prefs.putBoolean(PREFS_KEY, russian);
+            prefs.flush();
+        } catch (Exception e) {
+            // игнорируем ошибки сохранения
+        }
     }
 
     /** Текущий язык как строка для отображения на кнопке. */
@@ -98,7 +127,7 @@ public class Lang {
         return russian ? "RU" : "EN";
     }
 
-    /** Установить язык явно. */
+    /** Установить язык явно (без сохранения). */
     public static void setRussian(boolean ru) {
         russian = ru;
     }

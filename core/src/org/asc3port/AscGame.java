@@ -96,6 +96,9 @@ public class AscGame extends ApplicationAdapter {
             spriteNames = new String[0];
         }
 
+        // Загружаем сохранённый язык
+        Lang.load();
+
         state = STATE_SPLASH;
         stateTimer = 0;
     }
@@ -360,9 +363,34 @@ public class AscGame extends ApplicationAdapter {
     private void drawGame() {
         if (tileMap == null || gameCam == null) return;
 
+        // --- Параллакс-небо ---
         shapes.begin(ShapeRenderer.ShapeType.Filled);
-        shapes.setColor(0.35f, 0.55f, 0.75f, 1f);
-        shapes.rect(0, 0, screenW, screenH);
+        // Градиент неба: верх темнее (0.25, 0.45, 0.70), низ светлее (0.50, 0.72, 0.90)
+        int skyBands = 8;
+        float bandH = (float) screenH / skyBands;
+        for (int i = 0; i < skyBands; i++) {
+            float t = (float) i / (skyBands - 1); // 0 = верх, 1 = низ
+            float r = 0.25f + t * 0.25f;
+            float g = 0.45f + t * 0.27f;
+            float b = 0.70f + t * 0.20f;
+            shapes.setColor(r, g, b, 1f);
+            shapes.rect(0, i * bandH, screenW, bandH + 1);
+        }
+        // Простые облака (параллакс × 0.15 от камеры)
+        float cloudOffset = (gameCam.x * 0.15f) % screenW;
+        shapes.setColor(1f, 1f, 1f, 0.55f);
+        // Облако 1
+        float c1x = 80 - cloudOffset; if (c1x < -80) c1x += screenW + 80;
+        shapes.ellipse(c1x - 30, 35, 70, 24);
+        shapes.ellipse(c1x - 10, 22, 50, 28);
+        // Облако 2
+        float c2x = 260 - cloudOffset; if (c2x < -80) c2x += screenW + 80;
+        shapes.ellipse(c2x - 25, 50, 60, 20);
+        shapes.ellipse(c2x,      38, 45, 26);
+        // Облако 3
+        float c3x = 420 - cloudOffset; if (c3x < -80) c3x += screenW + 80;
+        shapes.ellipse(c3x - 35, 28, 80, 25);
+        shapes.ellipse(c3x - 15, 16, 55, 28);
         shapes.end();
 
         batch.begin();
