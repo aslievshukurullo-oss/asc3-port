@@ -46,14 +46,16 @@ public class TouchOverlay {
 
     // Кнопки
     private final Btn[] btns = {
-        // D-pad
+        // D-pad (левая сторона)
         new Btn("^",    Keys.UP,     62,  185, 30),
         new Btn("v",    Keys.DOWN,   62,  285, 30),
         new Btn("<",    Keys.LEFT,   16,  235, 30),
         new Btn(">",    Keys.RIGHT, 108,  235, 30),
-        // Действия справа
-        new Btn("OK",   Keys.FIRE,  430,  245, 40, true),  // Прыжок / подтверждение
-        new Btn("RUN",  Keys.NUM7,  375,  195, 28),        // Бег (NUM7)
+        // Действия (правая сторона)
+        new Btn("JMP",  Keys.FIRE,  430,  255, 36, true),  // Прыжок (большая)
+        new Btn("ATK",  Keys.NUM1,  380,  220, 26),        // Лёгкий удар
+        new Btn("HIT",  Keys.NUM3,  380,  280, 26),        // Тяжёлый удар
+        new Btn("RUN",  Keys.NUM7,  462,  200, 22),        // Бег
         // Навигация
         new Btn("BACK", Keys.SOFT_L, 455, 22,  20),        // ESC / меню
     };
@@ -113,6 +115,8 @@ public class TouchOverlay {
             Gdx.input.isKeyPressed(com.badlogic.gdx.Input.Keys.SPACE)) now |= Keys.FIRE;
         if (Gdx.input.isKeyPressed(com.badlogic.gdx.Input.Keys.SHIFT_LEFT) ||
             Gdx.input.isKeyPressed(com.badlogic.gdx.Input.Keys.SHIFT_RIGHT)) now |= Keys.NUM7;
+        if (Gdx.input.isKeyPressed(com.badlogic.gdx.Input.Keys.Z)) now |= Keys.NUM1; // лёгкий удар
+        if (Gdx.input.isKeyPressed(com.badlogic.gdx.Input.Keys.X)) now |= Keys.NUM3; // тяжёлый удар
         if (Gdx.input.isKeyPressed(com.badlogic.gdx.Input.Keys.ESCAPE)) now |= Keys.SOFT_L;
 
         pressed  = now & ~held;

@@ -4,7 +4,7 @@ import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.utils.Disposable;
 
 /**
- * Игровой персонаж (Connor) с базовой физикой.
+ * Игровой персонаж (Connor) с физикой и боёвкой.
  *
  * Спрайт: p5_000 (1066 анимационных кадров Connor-а).
  * Анимации (индексы из оригинала):
@@ -13,7 +13,14 @@ import com.badlogic.gdx.utils.Disposable;
  *   2 = бег
  *   3 = прыжок
  *   4 = падение
- *   5 = атака
+ *   5 = атака 1 (лёгкий удар)
+ *   6 = атака 2 (тяжёлый удар / combo)
+ *
+ * Боёвка:
+ *   FIRE (OK) в воздухе = атака в воздухе
+ *   NUM1      = лёгкий удар (стоя)
+ *   NUM3      = тяжёлый удар / counter (стоя)
+ *   Combo-окно: 400 мс после первого удара разрешает второй
  *
  * Физика: AABB коллизия с тайловой картой, гравитация, прыжок.
  */
@@ -22,13 +29,23 @@ public class Player implements Disposable {
     // Физические константы (в пикселях/сек)
     private static final float WALK_SPEED  = 100f;
     private static final float RUN_SPEED   = 200f;
-    private static final float JUMP_VY     = -380f;   // вверх = отрицательный y (y-down)
-    private static final float GRAVITY     = 700f;    // вниз = положительный y
+    private static final float JUMP_VY     = -380f;
+    private static final float GRAVITY     = 700f;
     private static final float MAX_FALL    = 500f;
 
-    // Размер хитбокса (ширина, высота) в пикселях
+    // Хитбокс персонажа
     public static final int HIT_W = 14;
     public static final int HIT_H = 28;
+
+    // Хитбокс атаки (выдвигается вперёд)
+    public static final int ATK_W = 22;
+    public static final int ATK_H = 20;
+
+    // Длительности состояний (секунды)
+    private static final float ATTACK_DURATION  = 0.40f; // длина анимации удара
+    private static final float COMBO_WINDOW     = 0.40f; // время для комбо после удара
+    private static final float HIT_STUN         = 0.25f; // фриз при получении урона
+    private static final float INVINCIBLE_TIME  = 0.60f; // неуязвимость после урона
 
     // Спрайт
     private ASprite sprite;
@@ -37,22 +54,45 @@ public class Player implements Disposable {
     private float animTimer = 0;
     private static final float TICK = 1f / 25f;
 
-    // Позиция (центр ног персонажа, пиксели, y-down)
+    // Позиция (центр ног, пиксели, y-down)
     public float x, y;
 
     // Скорость
     public float vx, vy;
 
-    // Состояние
-    public boolean onGround = false;
+    // Базовое состояние
+    public boolean onGround  = false;
     public boolean facingRight = true;
 
-    // Индексы анимаций (будут определены после загрузки спрайта)
-    private static final int ANIM_IDLE  = 0;
-    private static final int ANIM_WALK  = 1;
-    private static final int ANIM_RUN   = 2;
-    private static final int ANIM_JUMP  = 3;
-    private static final int ANIM_FALL  = 4;
+    // --- Боёвка ---
+    public enum AttackState { NONE, LIGHT, HEAVY }
+    public AttackState attackState = AttackState.NONE;
+
+    /** Сейчас активная фаза нанесения урона (хитбокс активен) */
+    public boolean attackHitActive = false;
+
+    private float attackTimer   = 0f; // время с начала текущего удара
+    private float comboTimer    = 0f; // окно для комбо
+    private boolean comboPending = false; // следующий удар в очереди
+
+    // Получение урона
+    public int   health        = 5;
+    public int   maxHealth     = 5;
+    private float hitStunTimer  = 0f;
+    private float invincTimer   = 0f;
+    public boolean isDead       = false;
+
+    // Индексы анимаций
+    private static final int ANIM_IDLE   = 0;
+    private static final int ANIM_WALK   = 1;
+    private static final int ANIM_RUN    = 2;
+    private static final int ANIM_JUMP   = 3;
+    private static final int ANIM_FALL   = 4;
+    private static final int ANIM_ATTACK = 5;
+    private static final int ANIM_HEAVY  = 6;
+
+    // Предыдущие входы для edge-detection
+    private int prevInput = 0;
 
     public Player(float startX, float startY) {
         x = startX;
@@ -65,20 +105,45 @@ public class Player implements Disposable {
     }
 
     public void update(float dt, TileMap map, int input) {
-        // Горизонтальное движение
-        boolean moveLeft  = (input & Keys.LEFT)  != 0;
-        boolean moveRight = (input & Keys.RIGHT) != 0;
-        boolean run       = (input & Keys.NUM7)  != 0; // NUM7 = бег
-        boolean jump      = (input & Keys.FIRE)  != 0;
+        if (isDead) return;
 
-        float speed = run ? RUN_SPEED : WALK_SPEED;
+        // Edge-detection: кнопки нажатые только в этом кадре
+        int justPressed = input & ~prevInput;
+        prevInput = input;
 
-        vx = 0;
-        if (moveLeft)  { vx = -speed; facingRight = false; }
-        if (moveRight) { vx =  speed; facingRight = true;  }
+        // Таймер неуязвимости
+        if (invincTimer > 0) invincTimer -= dt;
 
-        // Прыжок
-        if (jump && onGround) {
+        // Хит-стан (заморозка при получении урона)
+        if (hitStunTimer > 0) {
+            hitStunTimer -= dt;
+            vx = 0;
+            updateAnimation(dt);
+            return;
+        }
+
+        // --- Боёвка ---
+        updateAttack(dt, justPressed, input);
+
+        // Движение блокировано во время удара
+        boolean inAttack = attackState != AttackState.NONE;
+
+        // Горизонтальное движение (только вне атаки или в воздухе)
+        if (!inAttack || !onGround) {
+            boolean moveLeft  = (input & Keys.LEFT)  != 0;
+            boolean moveRight = (input & Keys.RIGHT) != 0;
+            boolean run       = (input & Keys.NUM7)  != 0;
+            float speed = run ? RUN_SPEED : WALK_SPEED;
+            vx = 0;
+            if (moveLeft)  { vx = -speed; facingRight = false; }
+            if (moveRight) { vx =  speed; facingRight = true;  }
+        } else {
+            vx = 0; // стоим на месте при ударе
+        }
+
+        // Прыжок (только не во время атаки на земле)
+        boolean jumpPressed = (justPressed & Keys.FIRE) != 0;
+        if (jumpPressed && onGround && !inAttack) {
             vy = JUMP_VY;
             onGround = false;
         }
@@ -93,100 +158,174 @@ public class Player implements Disposable {
         y += vy * dt;
         resolveVertical(map);
 
-        // Граница карты (не выходим за левый край)
+        // Граница карты
         if (x < HIT_W / 2f) { x = HIT_W / 2f; vx = 0; }
         if (x > map.getPixelWidth() - HIT_W / 2f) x = map.getPixelWidth() - HIT_W / 2f;
 
-        // Обновляем анимацию
         updateAnimation(dt);
     }
 
-    private void resolveHorizontal(TileMap map) {
-        float left  = x - HIT_W / 2f;
-        float right = x + HIT_W / 2f;
-        float top   = y - HIT_H;
-        float bottom = y;
+    // ---------------------------------------------------------------
+    //  Боёвка
+    // ---------------------------------------------------------------
 
+    private void updateAttack(float dt, int justPressed, int input) {
+        boolean lightBtn = (justPressed & Keys.NUM1) != 0;
+        boolean heavyBtn = (justPressed & Keys.NUM3) != 0;
+        // В воздухе OK = удар
+        boolean airAtk   = (justPressed & Keys.FIRE) != 0 && !onGround;
+
+        attackHitActive = false;
+
+        if (attackState != AttackState.NONE) {
+            attackTimer += dt;
+
+            // Хитбокс активен в середине анимации (25%-65% длительности)
+            float hitStart = ATTACK_DURATION * 0.25f;
+            float hitEnd   = ATTACK_DURATION * 0.65f;
+            attackHitActive = (attackTimer >= hitStart && attackTimer <= hitEnd);
+
+            if (attackTimer >= ATTACK_DURATION) {
+                // Удар завершён — открываем комбо-окно
+                attackState = AttackState.NONE;
+                attackTimer = 0;
+                if (comboPending) {
+                    comboPending = false;
+                    startAttack(AttackState.HEAVY);
+                } else {
+                    comboTimer = COMBO_WINDOW;
+                }
+            }
+        } else {
+            // Таймер комбо-окна
+            if (comboTimer > 0) comboTimer -= dt;
+
+            // Новый удар
+            if (lightBtn || airAtk) {
+                startAttack(AttackState.LIGHT);
+            } else if (heavyBtn) {
+                startAttack(AttackState.HEAVY);
+            }
+        }
+
+        // Комбо: нажали тяжёлый во время лёгкого
+        if (attackState == AttackState.LIGHT && heavyBtn) {
+            comboPending = true;
+        }
+    }
+
+    private void startAttack(AttackState type) {
+        attackState  = type;
+        attackTimer  = 0;
+        comboTimer   = 0;
+        comboPending = false;
+        attackHitActive = false;
+    }
+
+    /**
+     * Получить хитбокс атаки в мировых координатах.
+     * @return float[]{x, y, w, h} или null если атака неактивна / хитбокс не активен
+     */
+    public float[] getAttackBox() {
+        if (!attackHitActive) return null;
+        float dir = facingRight ? 1f : -1f;
+        float ax = facingRight ? (x + HIT_W / 2f) : (x - HIT_W / 2f - ATK_W);
+        float ay = y - HIT_H * 0.75f; // примерно на уровне груди
+        return new float[]{ ax, ay, ATK_W, ATK_H };
+    }
+
+    /**
+     * Нанести урон персонажу.
+     * @param dmg    количество урона
+     * @param fromX  источник удара (для knockback)
+     */
+    public void takeDamage(int dmg, float fromX) {
+        if (invincTimer > 0 || isDead) return;
+        health -= dmg;
+        if (health <= 0) {
+            health = 0;
+            isDead = true;
+        }
+        hitStunTimer = HIT_STUN;
+        invincTimer  = INVINCIBLE_TIME;
+        // Knockback
+        vx = (x > fromX ? 1f : -1f) * 80f;
+        vy = -120f;
+        onGround = false;
+    }
+
+    // ---------------------------------------------------------------
+    //  Физика / коллизии (без изменений)
+    // ---------------------------------------------------------------
+
+    private void resolveHorizontal(TileMap map) {
+        float left   = x - HIT_W / 2f;
+        float right  = x + HIT_W / 2f;
+        float top    = y - HIT_H;
+        float bottom = y;
         int ts = TileMap.TILE_SIZE;
-        // Проверяем тайлы слева и справа на уровне ног/середины/головы
         for (float checkY = top + 2; checkY <= bottom - 2; checkY += ts / 2f) {
-            if (vx < 0) { // движемся влево
+            if (vx < 0) {
                 int tx = (int)(left / ts);
                 int ty = (int)(checkY / ts);
-                if (isSolid(map, tx, ty)) {
-                    x = (tx + 1) * ts + HIT_W / 2f;
-                    vx = 0;
-                    break;
-                }
-            } else if (vx > 0) { // движемся вправо
+                if (isSolid(map, tx, ty)) { x = (tx + 1) * ts + HIT_W / 2f; vx = 0; break; }
+            } else if (vx > 0) {
                 int tx = (int)(right / ts);
                 int ty = (int)(checkY / ts);
-                if (isSolid(map, tx, ty)) {
-                    x = tx * ts - HIT_W / 2f;
-                    vx = 0;
-                    break;
-                }
+                if (isSolid(map, tx, ty)) { x = tx * ts - HIT_W / 2f; vx = 0; break; }
             }
         }
     }
 
     private void resolveVertical(TileMap map) {
-        float left  = x - HIT_W / 2f + 2;
-        float right = x + HIT_W / 2f - 2;
+        float left   = x - HIT_W / 2f + 2;
+        float right  = x + HIT_W / 2f - 2;
         float bottom = y;
         float top    = y - HIT_H;
         int ts = TileMap.TILE_SIZE;
-
-        if (vy > 0) { // падаем вниз
+        if (vy > 0) {
             int ty = (int)(bottom / ts);
             for (float cx = left; cx <= right; cx += ts / 2f) {
                 int tx = (int)(cx / ts);
-                if (isSolid(map, tx, ty)) {
-                    y = ty * ts;         // ставим на землю
-                    vy = 0;
-                    onGround = true;
-                    return;
-                }
+                if (isSolid(map, tx, ty)) { y = ty * ts; vy = 0; onGround = true; return; }
             }
             onGround = false;
-        } else if (vy < 0) { // прыгаем вверх
+        } else if (vy < 0) {
             int ty = (int)(top / ts);
             for (float cx = left; cx <= right; cx += ts / 2f) {
                 int tx = (int)(cx / ts);
-                if (isSolid(map, tx, ty)) {
-                    y = (ty + 1) * ts + HIT_H;
-                    vy = 0;
-                    break;
-                }
+                if (isSolid(map, tx, ty)) { y = (ty + 1) * ts + HIT_H; vy = 0; break; }
             }
         }
-
-        // Проверка земли под ногами
         if (vy >= 0) {
-            int ty = (int)(bottom / ts) + 1;
             boolean groundBelow = false;
             for (float cx = left; cx <= right; cx += 4) {
-                int tx = (int)(cx / ts);
-                if (isSolid(map, tx, (int)(bottom / ts))) {
-                    groundBelow = true; break;
-                }
+                if (isSolid(map, (int)(cx / ts), (int)(bottom / ts))) { groundBelow = true; break; }
             }
             onGround = groundBelow;
         }
     }
 
-    /** Является ли тайл на (tx, ty) твёрдым (не пустым). */
     private boolean isSolid(TileMap map, int tx, int ty) {
         int t0 = map.getTile(0, tx, ty);
-        // ID 255 = пустой, 0 = нет тайла. Остальные = твёрдые.
         return t0 != TileMap.EMPTY_TILE && t0 != 0;
     }
+
+    // ---------------------------------------------------------------
+    //  Анимация
+    // ---------------------------------------------------------------
 
     private void updateAnimation(float dt) {
         if (sprite == null || sprite.anims.length == 0) return;
 
         int newAnim;
-        if (!onGround) {
+        if (hitStunTimer > 0) {
+            newAnim = ANIM_IDLE; // зафриженный idle при хит-стане
+        } else if (attackState == AttackState.HEAVY) {
+            newAnim = Math.min(ANIM_HEAVY, sprite.anims.length - 1);
+        } else if (attackState == AttackState.LIGHT) {
+            newAnim = Math.min(ANIM_ATTACK, sprite.anims.length - 1);
+        } else if (!onGround) {
             newAnim = (vy < 0) ? ANIM_JUMP : ANIM_FALL;
         } else if (vx != 0) {
             newAnim = (Math.abs(vx) > WALK_SPEED + 10) ? ANIM_RUN : ANIM_WALK;
@@ -194,7 +333,6 @@ public class Player implements Disposable {
             newAnim = ANIM_IDLE;
         }
 
-        // Ограничиваем animIdx кол-вом доступных анимаций
         newAnim = Math.min(newAnim, sprite.anims.length - 1);
 
         if (newAnim != animIdx) {
@@ -211,17 +349,32 @@ public class Player implements Disposable {
                 int dur = Math.max(1, sprite.afs[afIdx].dur);
                 while (animTimer >= dur * TICK) {
                     animTimer -= dur * TICK;
-                    animStep = (animStep + 1) % an.n;
+                    // Анимация атаки не зацикливается
+                    if (attackState != AttackState.NONE) {
+                        animStep = Math.min(animStep + 1, an.n - 1);
+                    } else {
+                        animStep = (animStep + 1) % an.n;
+                    }
                 }
             }
         }
     }
 
+    // ---------------------------------------------------------------
+    //  Рендер
+    // ---------------------------------------------------------------
+
     public void draw(SpriteBatch batch, float camX, float camY) {
         if (sprite == null) return;
         if (sprite.anims.length == 0 && sprite.frames.length == 0) return;
 
-        // Позиция на экране (центр спрайта примерно = центр персонажа)
+        // Мигание при неуязвимости
+        if (invincTimer > 0) {
+            // Мигаем каждые 80 мс
+            long ms = (long)(invincTimer * 1000);
+            if ((ms / 80) % 2 == 0) return;
+        }
+
         float screenX = x - camX;
         float screenY = (y - HIT_H / 2f) - camY;
 
@@ -231,7 +384,6 @@ public class Player implements Disposable {
             if (afIdx < sprite.afs.length) {
                 ASprite.AnimFrame af = sprite.afs[afIdx];
                 int tr = af.tr;
-                // Флип по X если смотрим влево
                 if (!facingRight) tr ^= 1;
                 sprite.drawFrame(batch, af.frame, screenX + af.x, screenY + af.y, tr);
             }

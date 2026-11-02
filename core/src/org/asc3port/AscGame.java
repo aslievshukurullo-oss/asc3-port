@@ -60,6 +60,7 @@ public class AscGame extends ApplicationAdapter {
     private TileMap tileMap;
     private Player player;
     private GameCamera gameCam;
+    private CombatSystem combat;
     private boolean gameLoaded = false;
 
     // Запасной просмотрщик спрайтов (если карта не загрузится)
@@ -180,7 +181,17 @@ public class AscGame extends ApplicationAdapter {
         }
 
         player.update(dt, tileMap, pad.held);
+        if (combat != null) combat.update(dt, tileMap, player);
         gameCam.update(player.x, player.y);
+
+        // Смерть игрока — возврат в меню через 2 сек
+        if (player.isDead) {
+            stateTimer += dt;
+            if (stateTimer > 2.0f) {
+                state = STATE_MENU;
+                stateTimer = 0;
+            }
+        }
     }
 
     private int getTappedMenuItem(float tx, float ty) {
@@ -204,6 +215,10 @@ public class AscGame extends ApplicationAdapter {
     }
 
     private void startGame() {
+        // Чистим старую боёвку если была
+        if (combat != null) combat.clear();
+        combat = new CombatSystem();
+
         // Пробуем загрузить TileMap уровня 1
         try {
             tileMap  = new TileMap(1);
@@ -214,6 +229,8 @@ public class AscGame extends ApplicationAdapter {
                                       tileMap.getPixelWidth(),
                                       tileMap.getPixelHeight());
             gameCam.snapTo(player.x, player.y);
+            // Расставляем врагов правее спавна
+            combat.spawnLevelEnemies(spawn[0], spawn[1]);
             gameLoaded = true;
             useSpriteViewer = false;
         } catch (Exception e) {
@@ -315,29 +332,47 @@ public class AscGame extends ApplicationAdapter {
         float cx = screenW / 2f;
         int menuX = (int)(cx - MENU_W / 2f);
 
+        // Фон — тёмный градиент с золотым отблеском по центру
         shapes.begin(ShapeRenderer.ShapeType.Filled);
-        shapes.setColor(0.05f, 0.06f, 0.10f, 1f);
-        shapes.rect(0, 0, screenW, screenH);
-        shapes.setColor(0.12f, 0.10f, 0.03f, 1f);
-        shapes.rect(0, 0, menuX - 20, screenH);
-        shapes.rect(menuX + MENU_W + 20, 0, screenW - (menuX + MENU_W + 20), screenH);
+        int bgBands = 6;
+        float bh = (float) screenH / bgBands;
+        for (int i = 0; i < bgBands; i++) {
+            float t = (float) i / (bgBands - 1);
+            shapes.setColor(0.05f + t * 0.04f, 0.05f + t * 0.04f, 0.08f + t * 0.02f, 1f);
+            shapes.rect(0, i * bh, screenW, bh + 1);
+        }
+        // Боковые панели темнее
+        shapes.setColor(0.03f, 0.03f, 0.05f, 0.85f);
+        shapes.rect(0, 0, menuX - 15, screenH);
+        shapes.rect(menuX + MENU_W + 15, 0, screenW - (menuX + MENU_W + 15), screenH);
+        // Центральная колонка с лёгкой подсветкой
+        shapes.setColor(0.10f, 0.08f, 0.02f, 0.5f);
+        shapes.rect(menuX - 15, 85, MENU_W + 30, screenH - 95);
         shapes.end();
 
+        // Заголовок
         batch.begin();
+        font.getData().setScale(1.6f);
         font.setColor(0.95f, 0.80f, 0.15f, 1f);
-        font.draw(batch, "ASSASSIN'S CREED III", cx - 120, 40);
-        font.setColor(0.5f, 0.5f, 0.5f, 1f);
-        font.draw(batch, "J2ME  Port", cx - 45, 68);
+        font.draw(batch, "ASSASSIN'S CREED III", cx - 130, 38);
+        font.getData().setScale(1.0f);
+        font.setColor(0.45f, 0.42f, 0.35f, 1f);
+        font.draw(batch, "J2ME PORT  ·  LibGDX", cx - 74, 62);
+        font.getData().setScale(1.4f);
         // Кнопка языка (верхний правый угол)
-        font.setColor(0.7f, 0.7f, 0.3f, 1f);
-        font.draw(batch, "[" + Lang.currentLang() + "]", screenW - 50, 18);
+        font.setColor(0.85f, 0.85f, 0.25f, 1f);
+        font.draw(batch, "[" + Lang.currentLang() + "]", screenW - 54, 18);
         batch.end();
 
+        // Разделитель
         shapes.begin(ShapeRenderer.ShapeType.Filled);
-        shapes.setColor(0.5f, 0.4f, 0.1f, 1f);
+        shapes.setColor(0.65f, 0.50f, 0.08f, 1f);
+        shapes.rect(menuX - 20, 80, MENU_W + 40, 2);
+        shapes.setColor(0.25f, 0.20f, 0.04f, 1f);
         shapes.rect(menuX - 20, 82, MENU_W + 40, 1);
         shapes.end();
 
+        // Пункты меню
         batch.begin();
         for (int i = 0; i < MENU_ITEMS.length; i++) {
             float itemY = MENU_Y0 + i * MENU_DY;
@@ -345,18 +380,24 @@ public class AscGame extends ApplicationAdapter {
             if (sel) {
                 batch.end();
                 shapes.begin(ShapeRenderer.ShapeType.Filled);
-                shapes.setColor(0.22f, 0.18f, 0.04f, 0.9f);
-                shapes.rect(menuX - 10, itemY - 16, MENU_W + 20, 28);
-                shapes.setColor(0.9f, 0.7f, 0.1f, 1f);
-                shapes.rect(menuX - 10, itemY - 16, 3, 28);
+                shapes.setColor(0.22f, 0.17f, 0.03f, 0.92f);
+                shapes.rect(menuX - 12, itemY - 18, MENU_W + 24, 30);
+                // Золотая левая полоска
+                shapes.setColor(0.95f, 0.72f, 0.08f, 1f);
+                shapes.rect(menuX - 12, itemY - 18, 3, 30);
                 shapes.end();
                 batch.begin();
             }
-            font.setColor(sel ? 1f : 0.65f, sel ? 0.85f : 0.65f, sel ? 0.1f : 0.65f, 1f);
-            font.draw(batch, Lang.menuItem(i), menuX + (sel ? 8 : 6), itemY + 8);
+            float alpha = sel ? 1f : 0.7f;
+            font.setColor(sel ? 1.0f : 0.62f,
+                          sel ? 0.88f : 0.62f,
+                          sel ? 0.08f : 0.62f, alpha);
+            font.draw(batch, Lang.menuItem(i), menuX + (sel ? 10 : 7), itemY + 9);
         }
-        font.setColor(0.35f, 0.35f, 0.35f, 1f);
-        font.draw(batch, Lang.get("menu_hint"), 60, screenH - 10);
+        font.setColor(0.28f, 0.28f, 0.28f, 1f);
+        font.getData().setScale(1.0f);
+        font.draw(batch, Lang.get("menu_hint"), (int)(cx - 120), screenH - 10);
+        font.getData().setScale(1.4f);
         batch.end();
     }
 
@@ -395,13 +436,58 @@ public class AscGame extends ApplicationAdapter {
 
         batch.begin();
         tileMap.draw(batch, gameCam.x, gameCam.y, screenW, screenH);
+        // Рендер врагов
+        if (combat != null) {
+            for (Enemy e : combat.getEnemies()) {
+                e.draw(batch, gameCam.x, gameCam.y);
+            }
+        }
         if (player != null) player.draw(batch, gameCam.x, gameCam.y);
+        batch.end();
 
-        font.setColor(1f, 1f, 1f, 0.8f);
+        // HUD здоровья (ниже SpriteBatch — поверх всего через ShapeRenderer)
+        if (player != null) drawHUD();
+    }
+
+    private void drawHUD() {
+        final int HP_X = 125, HP_Y = 10;
+        final int HP_W = 80,  HP_H = 8;
+        final int HP_PAD = 2;
+
+        shapes.begin(ShapeRenderer.ShapeType.Filled);
+        // Тёмный фон полосы HP
+        shapes.setColor(0.1f, 0.1f, 0.1f, 0.75f);
+        shapes.rect(HP_X - HP_PAD, HP_Y - HP_PAD, HP_W + HP_PAD * 2, HP_H + HP_PAD * 2);
+        // Красная полоса HP
+        float hpPct = (float) player.health / player.maxHealth;
+        float hpColor_r = 0.2f + hpPct * 0.6f;
+        shapes.setColor(hpColor_r, hpPct * 0.6f, 0.05f, 1f);
+        shapes.rect(HP_X, HP_Y, HP_W * hpPct, HP_H);
+        // Зелёный если много здоровья
+        if (hpPct > 0.6f) shapes.setColor(0.15f, 0.75f, 0.15f, 1f);
+        shapes.rect(HP_X, HP_Y, HP_W * Math.min(hpPct, 1f), HP_H);
+
+        // BACK кнопка (правый угол)
+        shapes.setColor(0.1f, 0.1f, 0.1f, 0.65f);
+        shapes.rect(screenW - 68, 4, 50, 16);
+        shapes.end();
+
+        batch.begin();
+        font.setColor(1f, 1f, 1f, 0.9f);
+        font.getData().setScale(1.1f);
+        font.draw(batch, "HP", HP_X - 20, HP_Y + HP_H - 1);
+        font.setColor(1f, 0.85f, 0.3f, 0.95f);
+        font.draw(batch, "BACK", screenW - 64f, HP_Y + HP_H - 1);
+
+        // Отладка (координаты и стейт)
+        font.setColor(0.5f, 0.5f, 0.5f, 0.65f);
+        font.getData().setScale(0.85f);
         if (player != null)
-            font.draw(batch, String.format("X:%.0f Y:%.0f", player.x, player.y), 125, 14);
-        font.setColor(0.35f, 0.35f, 0.35f, 1f);
-        font.draw(batch, Lang.get("game_hint"), 125, screenH - 8);
+            font.draw(batch, String.format("%.0f,%.0f  %s  ATK:%s",
+                player.x, player.y,
+                player.onGround ? "GND" : "AIR",
+                player.attackState.name()), 125, screenH - 8);
+        font.getData().setScale(1.4f);
         batch.end();
     }
 
@@ -446,6 +532,7 @@ public class AscGame extends ApplicationAdapter {
         if (curSprite    != null) curSprite.dispose();
         if (tileMap      != null) tileMap.dispose();
         if (player       != null) player.dispose();
+        if (combat       != null) combat.clear();
         batch.dispose();
         shapes.dispose();
         font.dispose();
