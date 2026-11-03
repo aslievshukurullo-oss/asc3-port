@@ -52,10 +52,10 @@ public class TouchOverlay {
         new Btn("<",    Keys.LEFT,   16,  235, 30),
         new Btn(">",    Keys.RIGHT, 108,  235, 30),
         // Действия (правая сторона)
-        new Btn("JMP",  Keys.FIRE,  430,  255, 36, true),  // Прыжок (большая)
-        new Btn("ATK",  Keys.NUM1,  380,  220, 26),        // Лёгкий удар
-        new Btn("HIT",  Keys.NUM3,  380,  280, 26),        // Тяжёлый удар
-        new Btn("RUN",  Keys.NUM7,  462,  200, 22),        // Бег
+        new Btn("JMP",   Keys.FIRE,  430,  255, 36, true),  // Прыжок (большая)
+        new Btn("ATK",   Keys.NUM1,  375,  215, 28),        // Лёгкий удар
+        new Btn("HEAVY", Keys.NUM3,  375,  280, 28),        // Тяжёлый удар
+        new Btn("RUN",   Keys.NUM7,  465,  195, 24),        // Бег
         // Навигация
         new Btn("BACK", Keys.SOFT_L, 455, 22,  20),        // ESC / меню
     };
