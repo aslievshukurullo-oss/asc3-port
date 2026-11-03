@@ -33,7 +33,11 @@ public class ASprite implements Disposable {
         this.name = name;
         JsonValue j = new JsonReader().parse(Gdx.files.internal("sprites/" + name + ".json"));
         JsonValue a = j.get("atlas");
-        if (a != null && a.isString()) atlas = new Texture(Gdx.files.internal("sprites/" + a.asString()));
+        if (a != null && a.isString()) {
+            atlas = new Texture(Gdx.files.internal("sprites/" + a.asString()));
+            atlas.setFilter(com.badlogic.gdx.graphics.Texture.TextureFilter.Nearest,
+                            com.badlogic.gdx.graphics.Texture.TextureFilter.Nearest);
+        }
         modules = new Module[j.get("modules").size];
         int i = 0;
         for (JsonValue v : j.get("modules")) {

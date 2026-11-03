@@ -106,43 +106,13 @@ public class TileMap implements Disposable {
                     int frameIdx = tileId - 1; // 1-based -> 0-based
                     if (frameIdx < 0 || frameIdx >= ts.frames.length) continue;
 
-                    // Пиксельная позиция тайла (левый верхний угол)
+                    // Верхний-левый угол ячейки в экранных координатах
                     float px = tx * TILE_SIZE - camX;
                     float py = ty * TILE_SIZE - camY;
 
-                    drawTileFrame(batch, ts, frameIdx, px, py);
+                    // Используем ASprite.drawFrame для единообразия с персонажами
+                    ts.drawFrame(batch, frameIdx, px, py, 0);
                 }
-            }
-        }
-    }
-
-    /**
-     * Рисует frame тайла с верхним-левым углом ячейки в (px, py).
-     * @param ts    тайловый спрайтовый пак
-     */
-    private void drawTileFrame(SpriteBatch batch, ASprite ts, int frameIdx, float px, float py) {
-        ASprite.Frame frame = ts.frames[frameIdx];
-        for (int fmi = frame.first; fmi < frame.first + frame.n; fmi++) {
-            if (fmi >= ts.fms.length) break;
-            ASprite.FrameModule fm = ts.fms[fmi];
-            if (fm.m < 0 || fm.m >= ts.modules.length) continue;
-            ASprite.Module mod = ts.modules[fm.m];
-            if (mod.region == null) continue;
-
-            float mx = px + fm.x;
-            float my = py + fm.y;
-
-            boolean flipX = (fm.tr & 1) != 0;
-            boolean flipY = (fm.tr & 2) != 0;
-
-            if (flipX || flipY) {
-                batch.draw(mod.region,
-                    mx, my, mod.w / 2f, mod.h / 2f,
-                    mod.w, mod.h,
-                    flipX ? -1f : 1f, flipY ? -1f : 1f,
-                    0f);
-            } else {
-                batch.draw(mod.region, mx, my, mod.w, mod.h);
             }
         }
     }
