@@ -64,6 +64,8 @@ public class AscGame extends ApplicationAdapter {
     private Checkpoint checkpoint;
     private LevelManager levelMan;
     private GameHUD hud;
+    private DialogManager dialogMan;
+    private DialogBox dialogBox;
     private float deathTimer = 0f;
     private boolean gameLoaded = false;
 
@@ -108,6 +110,10 @@ public class AscGame extends ApplicationAdapter {
 
         // Загружаем сохранённый язык
         Lang.load();
+
+        // Диалоги
+        dialogMan = new DialogManager();
+        dialogBox = new DialogBox();
 
         // Инициализируем звук
         SoundManager.get();
@@ -227,6 +233,12 @@ public class AscGame extends ApplicationAdapter {
 
         gameCam.update(player.x, player.y);
 
+        // Диалоги
+        if (dialogMan != null) {
+            int dlgInput = dialogMan.isShowing() ? pad.pressed : 0;
+            dialogMan.update(dt, dlgInput);
+        }
+
         // Конец уровня
         if (LevelManager.isAtLevelEnd(player, tileMap)) {
             SoundManager.get().playLevelEnd();
@@ -297,6 +309,7 @@ public class AscGame extends ApplicationAdapter {
             gameCam.snapTo(player.x, player.y);
             int levelIdx = (levelMan != null) ? levelMan.getIndex() : 0;
             combat.spawnLevelEnemies(levelIdx, sx, sy);
+            if (dialogMan != null) dialogMan.loadForLevel(levelIdx);
             gameLoaded     = true;
             useSpriteViewer = false;
             SoundManager.get().playGameMusic();
@@ -528,6 +541,11 @@ public class AscGame extends ApplicationAdapter {
         if (player != null && hud != null) {
             hud.draw(shapes, batch, font, player, screenW, screenH);
             if (player.isDead) hud.drawDeathScreen(shapes, batch, font, deathTimer, screenW, screenH);
+        }
+
+        // Диалог
+        if (dialogMan != null && dialogBox != null && dialogMan.isShowing()) {
+            dialogBox.draw(shapes, batch, font, dialogMan.current(), screenW, screenH);
         }
 
         // Отладка (координаты и стейт)
