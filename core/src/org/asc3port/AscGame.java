@@ -533,6 +533,10 @@ public class AscGame extends ApplicationAdapter {
             for (Enemy e : combat.getEnemies()) {
                 e.draw(batch, gameCam.x, gameCam.y);
             }
+            // Рендер босса
+            if (combat.getBoss() != null) {
+                combat.getBoss().draw(batch, gameCam.x, gameCam.y);
+            }
         }
         if (player != null) player.draw(batch, gameCam.x, gameCam.y);
         batch.end();
@@ -541,6 +545,11 @@ public class AscGame extends ApplicationAdapter {
         if (player != null && hud != null) {
             hud.draw(shapes, batch, font, player, screenW, screenH);
             if (player.isDead) hud.drawDeathScreen(shapes, batch, font, deathTimer, screenW, screenH);
+        }
+
+        // HP-бар босса (центр вверху экрана)
+        if (combat != null && combat.getBoss() != null && !combat.getBoss().isDead()) {
+            drawBossHpBar(combat.getBoss());
         }
 
         // Диалог
@@ -557,6 +566,36 @@ public class AscGame extends ApplicationAdapter {
                 player.x, player.y,
                 player.onGround ? "GND" : "AIR",
                 player.attackState.name()), 125, screenH - 8);
+        font.getData().setScale(1.4f);
+        batch.end();
+    }
+
+    private void drawBossHpBar(Boss boss) {
+        float barW = screenW * 0.45f;
+        float barH = 8f;
+        float barX = (screenW - barW) / 2f;
+        float barY = 12f;
+        float fill  = boss.getHpFraction();
+
+        shapes.begin(ShapeRenderer.ShapeType.Filled);
+        shapes.setColor(0.15f, 0.05f, 0.05f, 0.85f);
+        shapes.rect(barX - 2, barY - 2, barW + 4, barH + 4);
+        // Цвет: зелёный→жёлтый→красный
+        if (fill > 0.5f)      shapes.setColor(0.2f, 0.8f, 0.2f, 1f);
+        else if (fill > 0.25f) shapes.setColor(0.9f, 0.7f, 0.1f, 1f);
+        else                   shapes.setColor(0.9f, 0.15f, 0.1f, 1f);
+        shapes.rect(barX, barY, barW * fill, barH);
+        shapes.end();
+
+        shapes.begin(ShapeRenderer.ShapeType.Line);
+        shapes.setColor(0.8f, 0.6f, 0.2f, 1f);
+        shapes.rect(barX - 2, barY - 2, barW + 4, barH + 4);
+        shapes.end();
+
+        batch.begin();
+        font.getData().setScale(0.9f);
+        font.setColor(1f, 0.9f, 0.5f, 1f);
+        font.draw(batch, "CHARLES LEE", barX, barY - 3);
         font.getData().setScale(1.4f);
         batch.end();
     }

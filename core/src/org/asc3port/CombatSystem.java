@@ -21,6 +21,12 @@ public class CombatSystem {
 
     private final List<Enemy> enemies = new ArrayList<Enemy>();
 
+    // Босс (null если уровень не боссовый)
+    private Boss boss = null;
+
+    // Последний уровень босса (levelIndex 6 = levelNum 9, финальный)
+    private static final int BOSS_LEVEL_INDEX = 6;
+
     /**
      * Позиции врагов для каждого уровня (levelNum → {{x,y}, ...}).
      * Координаты в пикселях, y = ноги врага (нижняя граница хитбокса).
@@ -51,16 +57,18 @@ public class CombatSystem {
         enemies.add(e);
     }
 
-    /** Удалить всех врагов (при смене уровня). */
+    /** Удалить всех врагов и босса (при смене уровня). */
     public void clear() {
         for (Enemy e : enemies) e.dispose();
         enemies.clear();
+        if (boss != null) { boss.dispose(); boss = null; }
     }
 
     /** Список врагов для рендера. */
-    public List<Enemy> getEnemies() {
-        return enemies;
-    }
+    public List<Enemy> getEnemies() { return enemies; }
+
+    /** Босс текущего уровня (null если нет). */
+    public Boss getBoss() { return boss; }
 
     /**
      * Обновить всех врагов и проверить коллизии.
@@ -95,6 +103,26 @@ public class CombatSystem {
                 }
             }
         }
+
+        // Босс
+        if (boss != null && !boss.isDead()) {
+            boss.update(dt, map, player);
+            if (boss.removed) {
+                boss.dispose(); boss = null;
+            } else {
+                if (!player.isDead) {
+                    float[] atkBox = player.getAttackBox();
+                    if (atkBox != null && overlaps(atkBox, boss.x, boss.y, Boss.HIT_W, Boss.HIT_H)) {
+                        int dmg = (player.attackState == Player.AttackState.HEAVY) ? 2 : 1;
+                        boss.takeDamage(dmg, player.x);
+                    }
+                    float[] bAtk = boss.getAttackBox();
+                    if (bAtk != null && overlaps(bAtk, player.x, player.y, Player.HIT_W, Player.HIT_H)) {
+                        player.takeDamage(2, boss.x); // босс бьёт сильнее
+                    }
+                }
+            }
+        }
     }
 
     /**
@@ -123,7 +151,13 @@ public class CombatSystem {
      */
     public void spawnLevelEnemies(int levelIndex, float spawnX, float spawnY) {
         clear();
-        if (levelIndex >= 0 && levelIndex < LEVEL_ENEMY_POSITIONS.length) {
+        if (levelIndex == BOSS_LEVEL_INDEX) {
+            // Финальный уровень: босс + 3 охранника перед ним
+            boss = new Boss(spawnX + 500, spawnY);
+            addEnemy(new Enemy(spawnX + 180, spawnY));
+            addEnemy(new Enemy(spawnX + 320, spawnY));
+            addEnemy(new Enemy(spawnX + 420, spawnY));
+        } else if (levelIndex >= 0 && levelIndex < LEVEL_ENEMY_POSITIONS.length) {
             float[][] positions = LEVEL_ENEMY_POSITIONS[levelIndex];
             for (float[] pos : positions) {
                 addEnemy(new Enemy(pos[0], pos[1]));
