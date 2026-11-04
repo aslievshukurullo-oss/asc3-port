@@ -376,6 +376,7 @@ public class AscGame extends ApplicationAdapter {
             useSpriteViewer = false;
             SoundManager.get().playGameMusic();
         } catch (Exception e) {
+            Gdx.app.error("AscGame", "startGameAt FAILED: " + e.getMessage(), e);
             gameLoaded     = false;
             useSpriteViewer = true;
             loadSprite(0);
@@ -668,6 +669,15 @@ public class AscGame extends ApplicationAdapter {
 
         batch.begin();
         tileMap.draw(batch, gameCam.x, gameCam.y, screenW, screenH);
+        batch.end();
+
+        // Fallback: цветные прямоугольники если спрайты не загрузились
+        if (!tileMap.areTileSetsLoaded()) {
+            shapes.setProjectionMatrix(cam.combined);
+            tileMap.drawFallback(shapes, gameCam.x, gameCam.y, screenW, screenH);
+        }
+
+        batch.begin();
         // Рендер врагов
         if (combat != null) {
             for (Enemy e : combat.getEnemies()) {

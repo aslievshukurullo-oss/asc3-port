@@ -201,6 +201,10 @@ public class Player implements Disposable {
         // Граница карты
         if (x < HIT_W / 2f) { x = HIT_W / 2f; vx = 0; }
         if (x > map.getPixelWidth() - HIT_W / 2f) x = map.getPixelWidth() - HIT_W / 2f;
+        // Нижняя граница — смерть от падения в пропасть
+        if (y > map.getPixelHeight() + 100) { isDead = true; }
+        // Верхняя граница
+        if (y - HIT_H < 0) { y = HIT_H; vy = 0; }
 
         updateAnimation(dt);
     }

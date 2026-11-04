@@ -1,6 +1,7 @@
 package org.asc3port;
 
 import com.badlogic.gdx.Gdx;
+import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.utils.Disposable;
 
@@ -94,27 +95,61 @@ public class TileMap implements Disposable {
         int tileX1 = Math.min(mapW - 1, (int)((camX + viewW) / TILE_SIZE) + 1);
         int tileY1 = Math.min(mapH - 1, (int)((camY + viewH) / TILE_SIZE) + 1);
 
-        // Рисуем сначала фон (layer 1), потом передний план (layer 0)
-        for (int layer = 1; layer >= 0; layer--) {
-            ASprite ts = tileSets[layer];
-            if (ts == null) continue; // пак не загружен — пропускаем слой
-            for (int ty = tileY0; ty <= tileY1; ty++) {
-                for (int tx = tileX0; tx <= tileX1; tx++) {
-                    int tileId = getTile(layer, tx, ty);
-                    if (tileId == EMPTY_TILE || tileId == 0) continue;
+        boolean spritesLoaded = (tileSets[0] != null || tileSets[1] != null);
 
-                    int frameIdx = tileId - 1; // 1-based -> 0-based
-                    if (frameIdx < 0 || frameIdx >= ts.frames.length) continue;
+        if (spritesLoaded) {
+            // Рисуем сначала фон (layer 1), потом передний план (layer 0)
+            for (int layer = 1; layer >= 0; layer--) {
+                ASprite ts = tileSets[layer];
+                if (ts == null) continue;
+                for (int ty = tileY0; ty <= tileY1; ty++) {
+                    for (int tx = tileX0; tx <= tileX1; tx++) {
+                        int tileId = getTile(layer, tx, ty);
+                        if (tileId == EMPTY_TILE || tileId == 0) continue;
+                        int frameIdx = tileId - 1;
+                        if (frameIdx < 0 || frameIdx >= ts.frames.length) continue;
+                        float px = tx * TILE_SIZE - camX;
+                        float py = ty * TILE_SIZE - camY;
+                        ts.drawFrame(batch, frameIdx, px, py, 0);
+                    }
+                }
+            }
+        } else {
+            // Fallback: рисуем цветные прямоугольники через SpriteBatch белым пикселем
+            // (будет заменено когда спрайты загрузятся)
+            Gdx.app.log("TileMap", "WARNING: tileSets not loaded, using fallback render");
+        }
+    }
 
-                    // Верхний-левый угол ячейки в экранных координатах
-                    float px = tx * TILE_SIZE - camX;
-                    float py = ty * TILE_SIZE - camY;
+    /**
+     * Fallback рендер через ShapeRenderer — рисует solid тайлы зелёными блоками.
+     * Вызывать МЕЖДУ batch.end() и batch.begin().
+     */
+    public void drawFallback(ShapeRenderer shapes, float camX, float camY, int viewW, int viewH) {
+        int tileX0 = Math.max(0, (int)(camX / TILE_SIZE));
+        int tileY0 = Math.max(0, (int)(camY / TILE_SIZE));
+        int tileX1 = Math.min(mapW - 1, (int)((camX + viewW) / TILE_SIZE) + 1);
+        int tileY1 = Math.min(mapH - 1, (int)((camY + viewH) / TILE_SIZE) + 1);
 
-                    // Используем ASprite.drawFrame для единообразия с персонажами
-                    ts.drawFrame(batch, frameIdx, px, py, 0);
+        shapes.begin(ShapeRenderer.ShapeType.Filled);
+        for (int ty = tileY0; ty <= tileY1; ty++) {
+            for (int tx = tileX0; tx <= tileX1; tx++) {
+                int fg = getTile(0, tx, ty);
+                int bg = getTile(1, tx, ty);
+                if (fg != EMPTY_TILE && fg != 0) {
+                    shapes.setColor(0.35f, 0.55f, 0.25f, 1f); // зелёный (земля/деревья)
+                    shapes.rect(tx * TILE_SIZE - camX, ty * TILE_SIZE - camY, TILE_SIZE - 1, TILE_SIZE - 1);
+                } else if (bg != EMPTY_TILE && bg != 0) {
+                    shapes.setColor(0.25f, 0.40f, 0.20f, 0.6f); // тёмный фон
+                    shapes.rect(tx * TILE_SIZE - camX, ty * TILE_SIZE - camY, TILE_SIZE - 1, TILE_SIZE - 1);
                 }
             }
         }
+        shapes.end();
+    }
+
+    public boolean areTileSetsLoaded() {
+        return tileSets[0] != null || tileSets[1] != null;
     }
 
     /**
@@ -127,7 +162,7 @@ public class TileMap implements Disposable {
         for (int ty = mapH - 1; ty >= 2; ty--) {
             int run = 0, runStart = 0;
             for (int tx = 0; tx < Math.min(60, mapW); tx++) {
-                int t = getTile(0, ty, tx);
+                int t = getTile(0, tx, ty);
                 if (t != EMPTY_TILE && t != 0) {
                     if (run == 0) runStart = tx;
                     run++;
@@ -136,8 +171,8 @@ public class TileMap implements Disposable {
                 }
                 if (run >= 3) {
                     // Нашли платформу — проверяем что над runStart пусто (2 тайла)
-                    int a1 = getTile(0, ty - 1, runStart);
-                    int a2 = getTile(0, ty - 2, runStart);
+                    int a1 = getTile(0, runStart, ty - 1);
+                    int a2 = getTile(0, runStart, ty - 2);
                     if ((a1 == EMPTY_TILE || a1 == 0) && (a2 == EMPTY_TILE || a2 == 0)) {
                         // Спавн на середине платформы
                         int midTx = runStart + 1;
