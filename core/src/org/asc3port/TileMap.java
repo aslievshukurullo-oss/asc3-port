@@ -122,30 +122,37 @@ public class TileMap implements Disposable {
      * @return float[]{x, y} в пикселях (y = ноги игрока, y-down)
      */
     public float[] findSpawn() {
-        // Ищем подходящее место: твёрдый тайл + 2 пустых тайла над ним
-        // Начинаем с колонки 3, ищем снизу вверх (в y-down большой ty = низ карты)
-        for (int tx = 3; tx < Math.min(40, mapW); tx++) {
-            for (int ty = mapH - 1; ty >= 2; ty--) {
-                int t = getTile(0, tx, ty);
+        // Ищем первую платформу (run >= 3 тайлов) в левой части карты (cols 0-60),
+        // снизу вверх, с 2 пустыми тайлами над ней — это стартовая позиция.
+        for (int ty = mapH - 1; ty >= 2; ty--) {
+            int run = 0, runStart = 0;
+            for (int tx = 0; tx < Math.min(60, mapW); tx++) {
+                int t = getTile(0, ty, tx);
                 if (t != EMPTY_TILE && t != 0) {
-                    // Проверяем что над тайлом есть место для персонажа (2 пустых тайла)
-                    int above1 = getTile(0, tx, ty - 1);
-                    int above2 = getTile(0, tx, ty - 2);
-                    if ((above1 == EMPTY_TILE || above1 == 0) &&
-                        (above2 == EMPTY_TILE || above2 == 0)) {
-                        // В y-down: ноги игрока стоят на верхнем крае тайла ty
-                        float spawnX = tx * TILE_SIZE + TILE_SIZE / 2f;
-                        float spawnY = ty * TILE_SIZE; // верхний край тайла ty
+                    if (run == 0) runStart = tx;
+                    run++;
+                } else {
+                    run = 0;
+                }
+                if (run >= 3) {
+                    // Нашли платформу — проверяем что над runStart пусто (2 тайла)
+                    int a1 = getTile(0, ty - 1, runStart);
+                    int a2 = getTile(0, ty - 2, runStart);
+                    if ((a1 == EMPTY_TILE || a1 == 0) && (a2 == EMPTY_TILE || a2 == 0)) {
+                        // Спавн на середине платформы
+                        int midTx = runStart + 1;
+                        float spawnX = midTx * TILE_SIZE + TILE_SIZE / 2f;
+                        float spawnY = ty * TILE_SIZE;
                         com.badlogic.gdx.Gdx.app.log("TileMap",
-                            "Spawn: tx=" + tx + " ty=" + ty + " px=(" + spawnX + "," + spawnY + ")");
+                            "Spawn: tx=" + midTx + " ty=" + ty + " px=(" + spawnX + "," + spawnY + ")");
                         return new float[]{ spawnX, spawnY };
                     }
+                    break; // нашли run но без воздуха — переходим к следующей строке
                 }
             }
         }
-        // Запасной вариант — примерно посередине карты по вертикали
-        float sx = 5 * TILE_SIZE;
-        float sy = (mapH / 2) * TILE_SIZE;
+        float sx = 10 * TILE_SIZE;
+        float sy = (mapH * 2 / 3) * TILE_SIZE;
         com.badlogic.gdx.Gdx.app.log("TileMap", "Spawn FALLBACK: " + sx + "," + sy);
         return new float[]{ sx, sy };
     }
