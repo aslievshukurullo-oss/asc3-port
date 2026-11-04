@@ -28,10 +28,11 @@ public class AscGame extends ApplicationAdapter {
     private int screenW = VIEW_W, screenH = VIEW_H;
 
     // Состояния
-    private static final int STATE_INIT   = 1;
-    private static final int STATE_SPLASH = 2;
-    private static final int STATE_MENU   = 5;
-    private static final int STATE_GAME   = 7;
+    private static final int STATE_INIT    = 1;
+    private static final int STATE_SPLASH  = 2;
+    private static final int STATE_MENU    = 5;
+    private static final int STATE_MISSION = 6;
+    private static final int STATE_GAME    = 7;
 
     private static final float SPLASH_TIME = 3.0f;
 
@@ -68,6 +69,22 @@ public class AscGame extends ApplicationAdapter {
     private DialogBox dialogBox;
     private float deathTimer = 0f;
     private boolean gameLoaded = false;
+
+    // --- Экран выбора миссий ---
+    private static final String[] MISSION_TITLES = {
+        "SEQUENCE 1",  "SEQUENCE 2",  "SEQUENCE 3",
+        "SEQUENCE 5",  "SEQUENCE 6",  "SEQUENCE 8",  "SEQUENCE 9"
+    };
+    private static final String[] MISSION_DESCS = {
+        "Prologue: Boston Harbor",
+        "The Frontier",
+        "Connor's Journey",
+        "The Assassin's Path",
+        "Pursuit of Lee",
+        "Final Confrontation",
+        "Epilogue"
+    };
+    private int missionSel = 0;
 
     // Переход между уровнями
     private static final int STATE_LEVEL_TRANS = 8;
@@ -179,6 +196,10 @@ public class AscGame extends ApplicationAdapter {
                 }
                 break;
 
+            case STATE_MISSION:
+                updateMissionSelect();
+                break;
+
             case STATE_GAME:
                 if (useSpriteViewer) updateSpriteViewer(dt);
                 else                 updateGame(dt);
@@ -261,10 +282,51 @@ public class AscGame extends ApplicationAdapter {
 
     private void activateMenu(int item) {
         switch (item) {
-            case 0: startGame();    break; // NEW GAME
+            case 0: // NEW GAME → экран выбора миссий
+                missionSel = 0;
+                state = STATE_MISSION;
+                stateTimer = 0;
+                break;
             case 1: continueGame(); break; // CONTINUE
             default: break;
         }
+    }
+
+    private void updateMissionSelect() {
+        if ((pad.pressed & Keys.UP) != 0)
+            missionSel = (missionSel - 1 + MISSION_TITLES.length) % MISSION_TITLES.length;
+        if ((pad.pressed & Keys.DOWN) != 0)
+            missionSel = (missionSel + 1) % MISSION_TITLES.length;
+        if ((pad.pressed & (Keys.FIRE | Keys.NUM5)) != 0)
+            launchMission(missionSel);
+        if ((pad.pressed & Keys.SOFT_L) != 0) {
+            state = STATE_MENU; stateTimer = 0;
+        }
+        if (pad.touchJustDown) {
+            // Кнопка Back (левый верхний)
+            if (pad.touchX <= 60 && pad.touchY <= 32) {
+                state = STATE_MENU; stateTimer = 0; return;
+            }
+            // Выбор миссии касанием
+            int mX = 20, mW = screenW - 40;
+            int mY0 = 65, mDY = 36;
+            for (int i = 0; i < MISSION_TITLES.length; i++) {
+                float itemY = mY0 + i * mDY;
+                if (pad.touchX >= mX && pad.touchX <= mX + mW
+                    && pad.touchY >= itemY - 2 && pad.touchY <= itemY + mDY - 4) {
+                    if (i == missionSel) launchMission(i);
+                    else missionSel = i;
+                    return;
+                }
+            }
+        }
+    }
+
+    private void launchMission(int idx) {
+        if (levelMan == null) levelMan = new LevelManager();
+        levelMan.setIndex(idx);
+        hud = new GameHUD();
+        startGameAt(null, true);
     }
 
     private void startGame() {
@@ -379,8 +441,9 @@ public class AscGame extends ApplicationAdapter {
         batch.setProjectionMatrix(cam.combined);
 
         switch (state) {
-            case STATE_SPLASH: drawSplash(); break;
-            case STATE_MENU:   drawMenu();   break;
+            case STATE_SPLASH:   drawSplash();        break;
+            case STATE_MENU:     drawMenu();           break;
+            case STATE_MISSION:  drawMissionSelect();  break;
             case STATE_GAME:
                 if (useSpriteViewer) drawSpriteViewer();
                 else                 drawGame();
@@ -491,6 +554,83 @@ public class AscGame extends ApplicationAdapter {
         font.draw(batch, Lang.get("menu_hint"), (int)(cx - 120), screenH - 10);
         font.getData().setScale(1.4f);
         batch.end();
+    }
+
+    private void drawMissionSelect() {
+        float cx = screenW / 2f;
+
+        // Фон — тёмный как меню
+        shapes.begin(ShapeRenderer.ShapeType.Filled);
+        int bgBands = 6;
+        float bh = (float) screenH / bgBands;
+        for (int i = 0; i < bgBands; i++) {
+            float t = (float) i / (bgBands - 1);
+            shapes.setColor(0.04f + t * 0.03f, 0.04f + t * 0.03f, 0.07f + t * 0.02f, 1f);
+            shapes.rect(0, i * bh, screenW, bh + 1);
+        }
+        shapes.end();
+
+        // Заголовок
+        batch.begin();
+        font.getData().setScale(1.6f);
+        font.setColor(0.95f, 0.80f, 0.15f, 1f);
+        font.draw(batch, "SELECT MISSION", cx - 105, 28);
+        font.getData().setScale(0.9f);
+        font.setColor(0.5f, 0.5f, 0.5f, 1f);
+        font.draw(batch, "< BACK", 12, 22);
+        font.getData().setScale(1.4f);
+        batch.end();
+
+        // Разделитель
+        shapes.begin(ShapeRenderer.ShapeType.Filled);
+        shapes.setColor(0.65f, 0.50f, 0.08f, 1f);
+        shapes.rect(10, 44, screenW - 20, 2);
+        shapes.end();
+
+        // Список миссий
+        int mX = 20, mW = screenW - 40;
+        int mY0 = 65, mDY = 36;
+        batch.begin();
+        for (int i = 0; i < MISSION_TITLES.length; i++) {
+            float itemY = mY0 + i * mDY;
+            boolean sel = i == missionSel;
+            boolean locked = i > 0; // только первая разблокирована (потом расширим через Checkpoint)
+
+            if (sel) {
+                batch.end();
+                shapes.begin(ShapeRenderer.ShapeType.Filled);
+                shapes.setColor(0.22f, 0.17f, 0.03f, 0.92f);
+                shapes.rect(mX - 4, itemY - 2, mW + 8, mDY - 2);
+                shapes.setColor(0.95f, 0.72f, 0.08f, 1f);
+                shapes.rect(mX - 4, itemY - 2, 3, mDY - 2);
+                shapes.end();
+                batch.begin();
+            }
+
+            // Номер миссии
+            float alpha = locked ? 0.35f : (sel ? 1f : 0.75f);
+            font.getData().setScale(1.1f);
+            font.setColor(sel ? 1.0f : 0.55f, sel ? 0.88f : 0.55f, sel ? 0.08f : 0.55f, alpha);
+            font.draw(batch, (i + 1) + ". " + MISSION_TITLES[i], mX + 8, itemY + 14);
+
+            // Описание
+            font.getData().setScale(0.85f);
+            font.setColor(locked ? 0.25f : 0.60f, locked ? 0.25f : 0.60f, locked ? 0.25f : 0.55f, alpha);
+            font.draw(batch, locked ? "[ LOCKED ]" : MISSION_DESCS[i], mX + 14, itemY + 27);
+        }
+        font.getData().setScale(1.4f);
+        font.setColor(0.28f, 0.28f, 0.28f, 1f);
+        font.draw(batch, "TAP TO SELECT  |  DOUBLE-TAP TO START", (int)(cx - 155), screenH - 8);
+        batch.end();
+
+        // Стрелка выбора
+        shapes.begin(ShapeRenderer.ShapeType.Filled);
+        float arrowY = mY0 + missionSel * mDY + mDY / 2f - 2;
+        shapes.setColor(0.95f, 0.72f, 0.08f, 1f);
+        shapes.triangle(mX + mW - 4, arrowY - 7,
+                        mX + mW - 4, arrowY + 7,
+                        mX + mW + 8, arrowY);
+        shapes.end();
     }
 
     private void drawGame() {
