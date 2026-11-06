@@ -2,6 +2,8 @@ name: Build APK
 
 on:
   push:
+    branches-ignore:
+      - dmc3d
   workflow_dispatch:
 
 jobs:
