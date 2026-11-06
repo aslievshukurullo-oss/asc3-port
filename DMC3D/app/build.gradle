@@ -4,6 +4,7 @@ plugins {
 }
 
 android {
+    namespace "com.game.engine"
     compileSdk 34
 
     defaultConfig {
