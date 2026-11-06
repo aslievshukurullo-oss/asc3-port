@@ -1,0 +1,39 @@
+name: Build DMC3D APK
+
+on:
+  push:
+    branches: [ "dmc3d" ]
+    paths: [ "DMC3D/**", ".github/workflows/dmc3d-apk.yml" ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v4
+
+    - name: Set up JDK 17
+      uses: actions/setup-java@v4
+      with:
+        java-version: '17'
+        distribution: 'temurin'
+
+    - name: Set up Android SDK
+      uses: android-actions/setup-android@v3
+
+    - name: Set up Gradle 8.9
+      uses: gradle/actions/setup-gradle@v4
+      with:
+        gradle-version: '8.9'
+
+    - name: Build Debug APK
+      working-directory: DMC3D
+      run: gradle assembleDebug --no-daemon
+
+    - name: Upload APK Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: DMC3D-Engine-APK
+        path: DMC3D/app/build/outputs/apk/debug/app-debug.apk
